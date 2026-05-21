@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BurnFit クローン - 筋トレ記録アプリ</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind カスタム設定 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          animation: {
+            fadeIn: 'fadeIn 0.2s ease-out forwards',
+            scaleUp: 'scaleUp 0.2s ease-out forwards',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(4px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            scaleUp: {
+              '0%': { transform: 'scale(0.95)', opacity: '0' },
+              '100%': { transform: 'scale(1)', opacity: '1' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* スクロールバーの非表示（モバイル対応） */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-orange-500 selection:text-white pb-24">
+
+  <!-- 共通ヘッダー -->
+  <header class="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="bg-gradient-to-tr from-orange-500 to-amber-400 p-2 rounded-xl text-slate-950 shadow-md shadow-orange-500/20">
+        <i data-lucide="dumbbell" class="w-6 h-6 stroke-[2.5]"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-orange-400 bg-clip-text text-transparent">
+          BurnFit <span class="text-xs font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">PRO</span>
+        </h1>
+      </div>
+    </div>
+
+    <!-- 進行中ワークアウトのフローティングインジケータ -->
+    <button id="floating-timer-btn" onclick="switchTab('workout')" class="hidden flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm px-3.5 py-2 rounded-full animate-pulse transition shadow-lg shadow-orange-500/20">
+      <i data-lucide="clock" class="w-4 h-4"></i>
+      <span id="floating-timer-text">計測中: 00:00</span>
+    </button>
+  </header>
+
+  <!-- メインコンテンツエリア -->
+  <main class="flex-1 max-w-md w-full mx-auto px-4 py-6">
+
+    <!-- ==========================================
+        タブ1: ダッシュボード
+        ========================================== -->
+    <div id="tab-dashboard" class="tab-content space-y-6">
+      <!-- クイック統計 -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-3 text-center">
+          <span class="text-xs text-slate-400 block mb-1">今週の記録</span>
+          <span id="stat-weekly-count" class="text-xl font-extrabold text-orange-400">0回</span>
+        </div>
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-3 text-center">
+          <span class="text-xs text-slate-400 block mb-1">総セット数</span>
+          <span id="stat-total-sets" class="text-xl font-extrabold text-amber-400">0</span>
+        </div>
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-3 text-center">
+          <span class="text-xs text-slate-400 block mb-1">総ボリューム</span>
+          <span id="stat-total-volume" class="text-xl font-extrabold text-emerald-400">0t</span>
+        </div>
+      </div>
+
+      <!-- 今日の調子・開始アクション -->
+      <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-3xl p-5 shadow-xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -z-10"></div>
+        <h2 class="text-lg font-bold text-white mb-1">今日も限界を突破しよう！ 🔥</h2>
+        <p class="text-sm text-slate-400 mb-5">ルーティンを選択するか、自由なトレーニングで今日の一歩を記録しましょう。</p>
+        
+        <div class="flex gap-3">
+          <button onclick="startWorkout('自由ワークアウト')" class="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-sm py-3.5 px-4 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2">
+            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+            クイックスタート
+          </button>
+          <button onclick="switchTab('routine')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-sm py-3.5 px-4 rounded-xl transition flex items-center justify-center gap-2">
+            <i data-lucide="book-open" class="w-4 h-4"></i>
+            ルーティンを選ぶ
+          </button>
+        </div>
+      </div>
+
+      <!-- カレンダーサマリー -->
+      <div class="bg-slate-800/30 border border-slate-800 rounded-2xl p-4">
+        <div class="flex justify-between items-center mb-4">
+          <div class="flex items-center gap-2">
+            <i data-lucide="calendar" class="w-5 h-5 text-orange-400"></i>
+            <h3 class="font-bold text-slate-200">カレンダー履歴</h3>
+          </div>
+          <button onclick="switchTab('history')" class="text-xs text-orange-400 hover:underline">すべて表示</button>
+        </div>
+        
+        <!-- 週表示カレンダー -->
+        <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center">
+          <!-- JSで自動生成 -->
+        </div>
+      </div>
+
+      <!-- 最近のトレーニング -->
+      <div class="space-y-3">
+        <h3 class="font-bold text-slate-200 flex items-center gap-2 px-1">
+          <i data-lucide="award" class="w-5 h-5 text-amber-400"></i>
+          最近のセッション
+        </h3>
+        <div id="recent-sessions-list" class="space-y-3">
+          <!-- JSで自動挿入 -->
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==========================================
+        タブ2: ワークアウト（計測・記録中）
+        ========================================== -->
+    <div id="tab-workout" class="tab-content hidden space-y-6">
+      <!-- ワークアウト未開始状態 -->
+      <div id="workout-empty-state" class="text-center py-12 space-y-4">
+        <div class="bg-slate-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-slate-400 border border-slate-700">
+          <i data-lucide="dumbbell" class="w-8 h-8"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg text-white">記録中のトレーニングはありません</h3>
+          <p class="text-sm text-slate-400 max-w-xs mx-auto mt-1">
+            クイックスタートか、ルーティン一覧からワークアウトを開始してください。
+          </p>
+        </div>
+        <button onclick="startWorkout('自由ワークアウト')" class="bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-sm px-6 py-3 rounded-xl transition shadow-lg shadow-orange-500/20">
+          トレーニングを開始する
+        </button>
+      </div>
+
+      <!-- ワークアウトアクティブ状態 -->
+      <div id="workout-active-state" class="hidden space-y-6">
+        <div class="bg-slate-800/80 border border-slate-700 rounded-3xl p-5 shadow-xl space-y-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <input id="active-workout-name" type="text" value="自由ワークアウト" class="bg-transparent font-bold text-xl text-white focus:outline-none border-b border-transparent focus:border-orange-500/50 pb-0.5 max-w-[200px]" />
+              <p class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                <i data-lucide="clock" class="w-3.5 h-3.5 text-orange-400"></i>
+                経過時間: <span id="active-workout-duration">00:00</span>
+              </p>
+            </div>
+            <button onclick="finishWorkout()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-1.5">
+              <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+              完了
+            </button>
+          </div>
+
+          <!-- インターバルタイマー -->
+          <div class="bg-slate-900/50 rounded-2xl p-3 flex items-center justify-between border border-slate-700/40">
+            <div class="flex items-center gap-2">
+              <i data-lucide="timer" class="w-4 h-4 text-amber-400"></i>
+              <span class="text-xs font-semibold text-slate-300">インターバル設定</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="rest-time-select" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2 py-1 text-slate-200">
+                <option value="30">30秒</option>
+                <option value="45">45秒</option>
+                <option value="60" selected>60秒</option>
+                <option value="90">90秒</option>
+                <option value="120">120秒</option>
+              </select>
+              <button id="rest-timer-btn" onclick="toggleRestTimer()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 py-1 rounded-lg font-bold">
+                スタート
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 選択されたトレーニング種目リスト -->
+        <div id="active-exercises-list" class="space-y-4">
+          <!-- JSで動的生成 -->
+        </div>
+
+        <!-- 種目の追加ボタン -->
+        <button onclick="openExerciseModal()" class="w-full bg-slate-800/50 hover:bg-slate-800 text-orange-400 hover:text-orange-300 border border-dashed border-slate-700 hover:border-orange-500/50 rounded-2xl py-4 font-bold flex items-center justify-center gap-2 transition">
+          <i data-lucide="plus-circle" class="w-5 h-5"></i>
+          種目を追加する
+        </button>
+
+        <button onclick="discardWorkout()" class="w-full text-slate-500 hover:text-rose-400 text-xs font-bold text-center py-2">
+          ワークアウトを破棄
+        </button>
+      </div>
+    </div>
+
+
+    <!-- ==========================================
+        タブ3: ルーティン
+        ========================================== -->
+    <div id="tab-routine" class="tab-content hidden space-y-6">
+      <div class="flex justify-between items-center px-1">
+        <div>
+          <h2 class="text-xl font-bold text-white">ルーティン管理</h2>
+          <p class="text-xs text-slate-400">よく使うメニューを登録してすぐに呼び出せます</p>
+        </div>
+        <button onclick="openCreateRoutineModal()" class="bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-xl px-3 py-2 text-xs font-bold flex items-center gap-1 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          作成
+        </button>
+      </div>
+
+      <div id="routines-list" class="space-y-4">
+        <!-- JSで動的生成 -->
+      </div>
+    </div>
+
+
+    <!-- ==========================================
+        タブ4: 履歴
+        ========================================== -->
+    <div id="tab-history" class="tab-content hidden space-y-6">
+      <div>
+        <h2 class="text-xl font-bold text-white">トレーニング履歴</h2>
+        <p class="text-xs text-slate-400">カレンダーから日付を選んで過去の成果を確認できます</p>
+      </div>
+
+      <!-- 日付ナビゲーター -->
+      <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <button onclick="adjustHistoryDate(-1)" class="p-1.5 bg-slate-800 rounded-lg hover:bg-slate-700 text-slate-300">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <div class="text-center">
+          <input type="date" id="history-date-picker" onchange="loadHistoryForSelectedDate()" class="bg-transparent font-bold text-slate-200 text-sm focus:outline-none" />
+        </div>
+        <button onclick="adjustHistoryDate(1)" class="p-1.5 bg-slate-800 rounded-lg hover:bg-slate-700 text-slate-300">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="history-detail-container" class="space-y-4">
+        <!-- 指定した日の記録をJSで挿入 -->
+      </div>
+    </div>
+
+
+    <!-- ==========================================
+        タブ5: 分析
+        ========================================== -->
+    <div id="tab-analytics" class="tab-content hidden space-y-6">
+      <div>
+        <h2 class="text-xl font-bold text-white">トレーニング分析</h2>
+        <p class="text-xs text-slate-400">筋肉の部位別バランスや総運動量をチェック</p>
+      </div>
+
+      <!-- 統計サマリー -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4">
+          <span class="text-xs text-slate-400 block mb-1">総ワークアウト</span>
+          <span id="analytics-total-count" class="text-2xl font-black text-orange-400">0回</span>
+        </div>
+        <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4">
+          <span class="text-xs text-slate-400 block mb-1">完了セット数</span>
+          <span id="analytics-total-sets" class="text-2xl font-black text-amber-400">0セット</span>
+        </div>
+      </div>
+
+      <!-- 部位別比率グラフ -->
+      <div class="bg-slate-800/40 border border-slate-800 rounded-3xl p-5 space-y-4">
+        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+          <i data-lucide="trending-up" class="w-4 h-4 text-orange-400"></i>
+          部位別ボリューム割合 (%)
+        </h3>
+        <div id="analytics-chart-container" class="space-y-3.5">
+          <!-- JSでプログレスバーを動的生成 -->
+        </div>
+      </div>
+
+      <!-- AIアドバイス -->
+      <div class="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-orange-500/20 rounded-3xl p-5 flex gap-3.5">
+        <i data-lucide="sparkles" class="w-6 h-6 text-amber-400 shrink-0"></i>
+        <div class="space-y-1">
+          <h4 class="font-bold text-amber-400 text-sm">パーソナル分析アドバイス</h4>
+          <p id="analytics-advice-text" class="text-xs text-slate-300 leading-relaxed">
+            トレーニングを記録して完了すると、ここにあなたの運動バランスに合わせたアドバイスが届きます！
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+
+  <!-- ==========================================
+      下部ナビゲーションバー
+      ========================================== -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80">
+    <div class="max-w-md mx-auto px-4 py-2 flex justify-between items-center text-center">
+      <button onclick="switchTab('dashboard')" id="nav-dashboard" class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition text-orange-500">
+        <i data-lucide="dumbbell" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">ホーム</span>
+      </button>
+
+      <button onclick="switchTab('workout')" id="nav-workout" class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition text-slate-400 hover:text-slate-300 relative">
+        <i data-lucide="play" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">ワークアウト</span>
+        <span id="nav-workout-dot" class="hidden absolute top-1.5 right-6 w-2 h-2 bg-orange-500 rounded-full"></span>
+      </button>
+
+      <button onclick="switchTab('routine')" id="nav-routine" class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition text-slate-400 hover:text-slate-300">
+        <i data-lucide="book-open" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">ルーティン</span>
+      </button>
+
+      <button onclick="switchTab('history')" id="nav-history" class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition text-slate-400 hover:text-slate-300">
+        <i data-lucide="calendar" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">履歴</span>
+      </button>
+
+      <button onclick="switchTab('analytics')" id="nav-analytics" class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition text-slate-400 hover:text-slate-300">
+        <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">分析</span>
+      </button>
+    </div>
+  </nav>
+
+
+  <!-- ==========================================
+      モーダル1: トレーニング種目の追加
+      ========================================== -->
+  <div id="exercise-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 space-y-4 animate-scaleUp shadow-2xl">
+      <div class="flex justify-between items-center">
+        <h3 class="font-extrabold text-white text-lg">種目を選択</h3>
+        <button onclick="closeExerciseModal()" class="text-slate-400 hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- フィルター & 検索 -->
+      <div class="space-y-2">
+        <input type="text" id="exercise-search" oninput="filterExercises()" placeholder="種目名で検索..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:ring-1 focus:ring-orange-500 focus:outline-none" />
+        <div class="flex gap-1 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <button onclick="setExerciseCategoryFilter('すべて')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-orange-500/10 text-orange-400 border-orange-500/30 font-bold">すべて</button>
+          <button onclick="setExerciseCategoryFilter('胸')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800">胸</button>
+          <button onclick="setExerciseCategoryFilter('背中')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800">背中</button>
+          <button onclick="setExerciseCategoryFilter('脚')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800">脚</button>
+          <button onclick="setExerciseCategoryFilter('肩')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800">肩</button>
+          <button onclick="setExerciseCategoryFilter('腕')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800">腕</button>
+          <button onclick="setExerciseCategoryFilter('腹筋')" class="category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800">腹筋</button>
+        </div>
+      </div>
+
+      <!-- リスト -->
+      <div id="modal-exercises-list" class="max-h-60 overflow-y-auto space-y-2 pr-1 no-scrollbar">
+        <!-- JSで動的フィルタリング生成 -->
+      </div>
+
+      <!-- カスタム種目追加フォーム -->
+      <div class="border-t border-slate-800/80 pt-4 space-y-3">
+        <h4 class="text-xs font-bold text-slate-300">新しい種目を作成する</h4>
+        <div class="flex gap-2">
+          <input type="text" id="custom-exercise-name" placeholder="種目名 (例: チンニング)" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:ring-1 focus:ring-orange-500 focus:outline-none" />
+          <select id="custom-exercise-category" class="bg-slate-950 border border-slate-800 text-xs rounded-xl px-2.5 text-slate-200">
+            <option value="胸">胸</option>
+            <option value="背中">背中</option>
+            <option value="脚">脚</option>
+            <option value="肩">肩</option>
+            <option value="腕">腕</option>
+            <option value="腹筋">腹筋</option>
+          </select>
+        </div>
+        <div class="flex justify-between items-center">
+          <div class="flex gap-2 text-[10px] text-slate-400">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="custom-type" value="weight" checked /> 重量×レップ
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="custom-type" value="duration" /> 時間(秒)
+            </label>
+          </div>
+          <button onclick="createCustomExercise()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 font-bold">作成</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==========================================
+      モーダル2: ルーティンの新規作成
+      ========================================== -->
+  <div id="routine-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 space-y-4 animate-scaleUp shadow-2xl">
+      <div class="flex justify-between items-center">
+        <h3 class="font-extrabold text-white text-lg">ルーティン作成</h3>
+        <button onclick="closeCreateRoutineModal()" class="text-slate-400 hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">ルーティン名</label>
+          <input type="text" id="new-routine-name" placeholder="例: 胸＆三頭 徹底追い込み" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:ring-1 focus:ring-orange-500 focus:outline-none" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">説明 (オプション)</label>
+          <input type="text" id="new-routine-desc" placeholder="例: 週の始まりのメインメニュー" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:ring-1 focus:ring-orange-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-400 block mb-1.5">構成種目（複数選択）</label>
+          <div id="routine-creation-exercises-list" class="max-h-36 overflow-y-auto space-y-1.5 border border-slate-800 rounded-xl p-2 bg-slate-950/50 no-scrollbar">
+            <!-- JSで種目選択チェックボックスを挿入 -->
+          </div>
+        </div>
+      </div>
+
+      <button onclick="saveNewRoutine()" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-sm py-3 rounded-xl transition flex items-center justify-center gap-2">
+        保存して作成
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ==========================================
+      アプリケーション ロジック (Vanilla JS)
+      ========================================== -->
+  <script>
+    // --- プリセットデータ定義 ---
+    const PRESET_EXERCISES = [
+      { id: 'ex-1', name: 'ベンチプレス', category: '胸', type: 'weight' },
+      { id: 'ex-2', name: 'インクライン・プレス', category: '胸', type: 'weight' },
+      { id: 'ex-3', name: 'デッドリフト', category: '背中', type: 'weight' },
+      { id: 'ex-4', name: 'ラットプルダウン', category: '背中', type: 'weight' },
+      { id: 'ex-5', name: 'スクワット', category: '脚', type: 'weight' },
+      { id: 'ex-6', name: 'レッグプレス', category: '脚', type: 'weight' },
+      { id: 'ex-7', name: 'ショルダープレス', category: '肩', type: 'weight' },
+      { id: 'ex-8', name: 'サイドレイズ', category: '肩', type: 'weight' },
+      { id: 'ex-9', name: 'アームカール', category: '腕', type: 'weight' },
+      { id: 'ex-10', name: 'スカルクラッシャー', category: '腕', type: 'weight' },
+      { id: 'ex-11', name: 'プランク', category: '腹筋', type: 'duration' },
+      { id: 'ex-12', name: 'レッグレイズ', category: '腹筋', type: 'reps' },
+    ];
+
+    const DEFAULT_ROUTINES = [
+      {
+        id: 'rot-1',
+        name: '胸＆三頭 集中デイ',
+        description: '厚い胸板と太い二の腕を作るためのベーシックメニュー',
+        exercises: ['ex-1', 'ex-2', 'ex-10']
+      },
+      {
+        id: 'rot-2',
+        name: '背中＆二頭 強化デイ',
+        description: '逆三角形の広背筋と引き締まった背筋を目指すメニュー',
+        exercises: ['ex-3', 'ex-4', 'ex-9']
+      },
+      {
+        id: 'rot-3',
+        name: '下半身＆コア 基礎力向上',
+        description: '大きな筋肉を鍛え代謝を上げるスクワット中心メニュー',
+        exercises: ['ex-5', 'ex-11', 'ex-12']
+      }
+    ];
+
+    const DEMO_HISTORY = [
+      {
+        id: 'hist-1',
+        date: '2026-05-18',
+        duration: 2700,
+        totalVolume: 2400,
+        exercises: [
+          { name: 'ベンチプレス', category: '胸', sets: [{ weight: 60, reps: 10 }, { weight: 60, reps: 10 }, { weight: 65, reps: 8 }] },
+          { name: 'インクライン・プレス', category: '胸', sets: [{ weight: 20, reps: 10 }, { weight: 20, reps: 10 }] }
+        ]
+      },
+      {
+        id: 'hist-2',
+        date: '2026-05-19',
+        duration: 3300,
+        totalVolume: 3200,
+        exercises: [
+          { name: 'スクワット', category: '脚', sets: [{ weight: 70, reps: 10 }, { weight: 80, reps: 8 }, { weight: 80, reps: 8 }] },
+          { name: 'レッグレイズ', category: '腹筋', sets: [{ weight: 0, reps: 15 }, { weight: 0, reps: 15 }] }
+        ]
+      },
+      {
+        id: 'hist-3',
+        date: '2026-05-21',
+        duration: 1800,
+        totalVolume: 1450,
+        exercises: [
+          { name: 'ショルダープレス', category: '肩', sets: [{ weight: 15, reps: 10 }, { weight: 15, reps: 10 }] },
+          { name: 'サイドレイズ', category: '肩', sets: [{ weight: 7.5, reps: 15 }, { weight: 7.5, reps: 15 }] }
+        ]
+      }
+    ];
+
+    // --- 状態管理オブジェクト ---
+    let state = {
+      activeTab: 'dashboard',
+      customExercises: JSON.parse(localStorage.getItem('burnfit_custom_exercises')) || [],
+      routines: JSON.parse(localStorage.getItem('burnfit_routines')) || DEFAULT_ROUTINES,
+      history: JSON.parse(localStorage.getItem('burnfit_history')) || DEMO_HISTORY,
+      activeWorkout: null, // { name, startTime, exercises: [ { id, name, category, type, sets: [ { weight, reps, duration, done } ] } ] }
+      selectedHistoryDate: new Date().toISOString().split('T')[0],
+      exerciseFilterCategory: 'すべて',
+      exerciseSearchQuery: '',
+    };
+
+    // タイマー関連の参照変数
+    let workoutIntervalTimer = null;
+    let restTimerInterval = null;
+    let restTimerValue = 0;
+    let isRestTimerRunning = false;
+
+    // 全ての運動種目 (プリセット + カスタム)
+    function getAllExercises() {
+      return [...PRESET_EXERCISES, ...state.customExercises];
+    }
+
+    // ローカルストレージにデータを同期
+    function saveState() {
+      localStorage.setItem('burnfit_custom_exercises', JSON.stringify(state.customExercises));
+      localStorage.setItem('burnfit_routines', JSON.stringify(state.routines));
+      localStorage.setItem('burnfit_history', JSON.stringify(state.history));
+    }
+
+    // --- 初期化処理 ---
+    window.addEventListener('DOMContentLoaded', () => {
+      // 現在の日付を履歴ピッカーの初期値にする
+      document.getElementById('history-date-picker').value = state.selectedHistoryDate;
+
+      // ビジュアル＆UIパーツの構築
+      renderDashboard();
+      renderRoutines();
+      renderHistory();
+      renderAnalytics();
+      
+      lucide.createIcons();
+    });
+
+    // --- タブ切り替え ---
+    function switchTab(tabId) {
+      state.activeTab = tabId;
+      
+      // 全タブを隠す
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      // 対象のタブを表示
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+      // ナビゲーションバーのスタイル調整
+      const tabs = ['dashboard', 'workout', 'routine', 'history', 'analytics'];
+      tabs.forEach(t => {
+        const navBtn = document.getElementById(`nav-${t}`);
+        if (t === tabId) {
+          navBtn.classList.remove('text-slate-400', 'hover:text-slate-300');
+          navBtn.classList.add('text-orange-500');
+        } else {
+          navBtn.classList.remove('text-orange-500');
+          navBtn.classList.add('text-slate-400', 'hover:text-slate-300');
+        }
+      });
+
+      // タブごとのリフレッシュ
+      if (tabId === 'dashboard') {
+        renderDashboard();
+      } else if (tabId === 'workout') {
+        renderWorkoutScreen();
+      } else if (tabId === 'routine') {
+        renderRoutines();
+      } else if (tabId === 'history') {
+        renderHistory();
+      } else if (tabId === 'analytics') {
+        renderAnalytics();
+      }
+
+      lucide.createIcons();
+    }
+
+    // --- 時間フォーマッタ ---
+    function formatTime(totalSeconds) {
+      const hrs = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
+      return [
+        hrs > 0 ? String(hrs).padStart(2, '0') : null,
+        String(mins).padStart(2, '0'),
+        String(secs).padStart(2, '0')
+      ].filter(Boolean).join(':');
+    }
+
+    // =========================================================================
+    // ダッシュボード構築
+    // =========================================================================
+    function renderDashboard() {
+      // 1. 今週の記録数の計算 (過去7日間)
+      const now = new Date();
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      
+      const weeklyWorkouts = state.history.filter(h => {
+        const d = new Date(h.date);
+        return d >= oneWeekAgo && d <= now;
+      });
+      document.getElementById('stat-weekly-count').innerText = `${weeklyWorkouts.length}回`;
+
+      // 2. 総セット数の計算
+      let totalSetsCount = 0;
+      state.history.forEach(h => {
+        h.exercises.forEach(ex => {
+          totalSetsCount += ex.sets.length;
+        });
+      });
+      document.getElementById('stat-total-sets').innerText = totalSetsCount;
+
+      // 3. 総ボリューム（t = トン 換算）
+      let totalVolumeKg = 0;
+      state.history.forEach(h => {
+        totalVolumeKg += (h.totalVolume || 0);
+      });
+      const totalVolumeTons = (totalVolumeKg / 1000).toFixed(1);
+      document.getElementById('stat-total-volume').innerText = `${totalVolumeTons}t`;
+
+      // 4. カレンダーグリッド (直近7日)
+      const calendarGrid = document.getElementById('calendar-grid');
+      calendarGrid.innerHTML = '';
+      const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+      
+      for (let i = 0; i < 7; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - 6 + i);
+        const dateStr = d.toISOString().split('T')[0];
+        const hasWorkout = state.history.some(h => h.date === dateStr);
+        const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+        const dayCol = document.createElement('div');
+        dayCol.className = `p-2 rounded-xl flex flex-col items-center justify-between ${
+          isToday ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-slate-800/40'
+        }`;
+        
+        dayCol.innerHTML = `
+          <span class="text-[10px] text-slate-400 mb-1">${dayNames[d.getDay()]}</span>
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+            hasWorkout 
+              ? 'bg-orange-500 text-slate-950 font-black' 
+              : isToday 
+                ? 'text-orange-400 ring-1 ring-orange-500/40' 
+                : 'text-slate-300'
+          }">
+            ${d.getDate()}
+          </div>
+        `;
+        calendarGrid.appendChild(dayCol);
+      }
+
+      // 5. 最近のセッション表示 (最新の2件)
+      const recentList = document.getElementById('recent-sessions-list');
+      recentList.innerHTML = '';
+      const sortedHistory = [...state.history].sort((a, b) => b.date.localeCompare(a.date));
+
+      if (sortedHistory.length === 0) {
+        recentList.innerHTML = `
+          <div class="text-center py-6 text-xs text-slate-500 bg-slate-800/20 border border-dashed border-slate-800 rounded-2xl">
+            最近のトレーニングセッションはまだありません
+          </div>
+        `;
+      } else {
+        sortedHistory.slice(0, 2).forEach(item => {
+          const card = document.createElement('div');
+          card.className = "bg-slate-800/40 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:bg-slate-800/60 transition";
+          
+          const exNames = item.exercises.map(e => e.name).slice(0, 3).join(', ');
+          const extraCount = item.exercises.length > 3 ? `+他${item.exercises.length - 3}種目` : '';
+
+          card.innerHTML = `
+            <div class="flex justify-between items-start mb-3">
+              <div>
+                <h4 class="font-bold text-white text-sm line-clamp-1">${exNames}${extraCount}</h4>
+                <span class="text-xs text-slate-400">${item.date} • ${formatTime(item.duration)}</span>
+              </div>
+              <span class="text-xs font-extrabold bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/20">
+                ${item.totalVolume}kg
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              ${item.exercises.map(ex => `
+                <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700/50">
+                  ${ex.name} (${ex.sets.length}S)
+                </span>
+              `).join('')}
+            </div>
+          `;
+          recentList.appendChild(card);
+        });
+      }
+    }
+
+    // =========================================================================
+    // ワークアウト進行・タイマー制御
+    // =========================================================================
+    function startWorkout(title, defaultExerciseIds = []) {
+      // 進行中ワークアウトを作成
+      const workoutExercises = defaultExerciseIds.map(id => {
+        const base = getAllExercises().find(ex => ex.id === id);
+        if (!base) return null;
+        return {
+          id: base.id,
+          name: base.name,
+          category: base.category,
+          type: base.type,
+          sets: [
+            base.type === 'duration' 
+              ? { weight: 0, duration: 60, done: false }
+              : { weight: 0, reps: 10, done: false }
+          ]
+        };
+      }).filter(Boolean);
+
+      state.activeWorkout = {
+        name: title,
+        startTime: Date.now(),
+        exercises: workoutExercises
+      };
+
+      // タイマー再起動
+      if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
+      workoutIntervalTimer = setInterval(updateWorkoutTimerDisplay, 1000);
+
+      // UIに反映
+      document.getElementById('active-workout-name').value = title;
+      document.getElementById('floating-timer-btn').classList.remove('hidden');
+      document.getElementById('nav-workout-dot').classList.remove('hidden');
+
+      switchTab('workout');
+    }
+
+    function updateWorkoutTimerDisplay() {
+      if (!state.activeWorkout) return;
+      const elapsed = Math.floor((Date.now() - state.activeWorkout.startTime) / 1000);
+      const timeStr = formatTime(elapsed);
+      document.getElementById('active-workout-duration').innerText = timeStr;
+      document.getElementById('floating-timer-text').innerText = `計測中: ${timeStr}`;
+    }
+
+    function renderWorkoutScreen() {
+      const emptyState = document.getElementById('workout-empty-state');
+      const activeState = document.getElementById('workout-active-state');
+
+      if (!state.activeWorkout) {
+        emptyState.classList.remove('hidden');
+        activeState.classList.add('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      activeState.classList.remove('hidden');
+
+      // 運動種目のレンダリング
+      const listContainer = document.getElementById('active-exercises-list');
+      listContainer.innerHTML = '';
+
+      state.activeWorkout.exercises.forEach((ex, exIdx) => {
+        const exCard = document.createElement('div');
+        exCard.className = "bg-slate-800/40 border border-slate-800 rounded-3xl p-4 space-y-3";
+
+        let setsRowsHtml = '';
+        ex.sets.forEach((set, setIdx) => {
+          const inputPlaceholder = ex.type === 'duration' ? '秒' : '回数';
+          const valueField = ex.type === 'duration' ? (set.duration || '') : (set.reps || '');
+          const doneClass = set.done ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-700 hover:border-slate-500 text-slate-400';
+          const doneRowBg = set.done ? 'bg-emerald-500/5 border border-emerald-500/10' : 'bg-transparent';
+
+          setsRowsHtml += `
+            <div class="grid grid-cols-12 gap-2 items-center text-center p-1 rounded-xl transition ${doneRowBg}">
+              <span class="col-span-2 text-sm font-bold text-slate-400">${setIdx + 1}</span>
+              
+              <input 
+                type="number" 
+                value="${set.weight || ''}" 
+                placeholder="kg"
+                ${set.done ? 'disabled' : ''}
+                oninput="updateSetData(${exIdx}, ${setIdx}, 'weight', this.value)"
+                class="col-span-4 bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-center text-sm font-bold text-white focus:ring-1 focus:ring-orange-500 focus:outline-none"
+              />
+
+              <input 
+                type="number" 
+                value="${valueField}" 
+                placeholder="${inputPlaceholder}"
+                ${set.done ? 'disabled' : ''}
+                oninput="updateSetData(${exIdx}, ${setIdx}, '${ex.type === 'duration' ? 'duration' : 'reps'}', this.value)"
+                class="col-span-4 bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-center text-sm font-bold text-white focus:ring-1 focus:ring-orange-500 focus:outline-none"
+              />
+
+              <div class="col-span-2 flex justify-center">
+                <button 
+                  onclick="toggleSetDone(${exIdx}, ${setIdx})"
+                  class="w-7 h-7 rounded-lg flex items-center justify-center transition border ${doneClass}"
+                >
+                  <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        });
+
+        exCard.innerHTML = `
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                ${ex.category}
+              </span>
+              <h4 class="font-bold text-white">${ex.name}</h4>
+            </div>
+            <button onclick="removeExerciseFromWorkout(${exIdx})" class="text-slate-500 hover:text-rose-400 p-1">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- セットリストテーブル -->
+          <div class="space-y-2">
+            <div class="grid grid-cols-12 gap-2 text-center text-xs text-slate-400 font-bold px-1">
+              <span class="col-span-2">セット</span>
+              <span class="col-span-4">重量</span>
+              <span class="col-span-4">${ex.type === 'duration' ? '持続時間' : 'レップ数'}</span>
+              <span class="col-span-2">完了</span>
+            </div>
+            ${setsRowsHtml}
+          </div>
+
+          <!-- アクション -->
+          <div class="flex gap-2 pt-2 border-t border-slate-800/40">
+            <button onclick="addSetToExercise(${exIdx})" class="flex-1 bg-slate-800 hover:bg-slate-700/60 text-xs py-2 rounded-xl text-slate-300 font-bold border border-slate-700 flex items-center justify-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              セットを追加
+            </button>
+            <button onclick="removeLastSet(${exIdx})" class="px-3 bg-slate-800 hover:bg-slate-700/60 text-xs py-2 rounded-xl text-slate-400 hover:text-rose-400 border border-slate-700">
+              削除
+            </button>
+          </div>
+        `;
+
+        listContainer.appendChild(exCard);
+      });
+
+      lucide.createIcons();
+    }
+
+    // セットデータの更新
+    function updateSetData(exIdx, setIdx, field, val) {
+      if (!state.activeWorkout) return;
+      state.activeWorkout.exercises[exIdx].sets[setIdx][field] = parseFloat(val) || 0;
+    }
+
+    // セット完了ボタンの切替
+    function toggleSetDone(exIdx, setIdx) {
+      if (!state.activeWorkout) return;
+      const set = state.activeWorkout.exercises[exIdx].sets[setIdx];
+      set.done = !set.done;
+
+      // チェックを入れたときに自動レストタイマー起動
+      if (set.done) {
+        startRestTimer();
+      }
+
+      renderWorkoutScreen();
+    }
+
+    // 運動にセットを追加
+    function addSetToExercise(exIdx) {
+      if (!state.activeWorkout) return;
+      const sets = state.activeWorkout.exercises[exIdx].sets;
+      const lastSet = sets[sets.length - 1] || { weight: 0, reps: 10, duration: 60 };
+      
+      sets.push({
+        weight: lastSet.weight,
+        reps: lastSet.reps,
+        duration: lastSet.duration,
+        done: false
+      });
+      renderWorkoutScreen();
+    }
+
+    // 最後のセットを削除
+    function removeLastSet(exIdx) {
+      if (!state.activeWorkout) return;
+      const sets = state.activeWorkout.exercises[exIdx].sets;
+      if (sets.length > 1) {
+        sets.pop();
+        renderWorkoutScreen();
+      }
+    }
+
+    // 運動自体の削除
+    function removeExerciseFromWorkout(exIdx) {
+      if (!state.activeWorkout) return;
+      state.activeWorkout.exercises.splice(exIdx, 1);
+      renderWorkoutScreen();
+    }
+
+    // ワークアウト終了とデータの保存
+    function finishWorkout() {
+      if (!state.activeWorkout) return;
+
+      // 完了したセット・種目のみ収集
+      const savedExercises = [];
+      state.activeWorkout.exercises.forEach(ex => {
+        const completedSets = ex.sets.filter(s => s.done);
+        if (completedSets.length > 0) {
+          savedExercises.push({
+            name: ex.name,
+            category: ex.category,
+            sets: completedSets.map(s => ({
+              weight: s.weight || 0,
+              reps: s.reps || 0,
+              duration: s.duration || 0
+            }))
+          });
+        }
+      });
+
+      if (savedExercises.length === 0) {
+        alert("完了済みのトレーニングセットがありません。チェックアイコンを押して記録を完了させてください。");
+        return;
+      }
+
+      // 総ボリュームの算出
+      let totalVolume = 0;
+      savedExercises.forEach(ex => {
+        ex.sets.forEach(s => {
+          totalVolume += (s.weight * (s.reps || 1));
+        });
+      });
+
+      const elapsed = Math.floor((Date.now() - state.activeWorkout.startTime) / 1000);
+      const workoutNameInput = document.getElementById('active-workout-name');
+
+      const newHistoryEntry = {
+        id: 'hist-' + Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        duration: elapsed,
+        totalVolume: totalVolume,
+        exercises: savedExercises
+      };
+
+      state.history.unshift(newHistoryEntry);
+      saveState();
+
+      // 初期化
+      state.activeWorkout = null;
+      if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
+      document.getElementById('floating-timer-btn').classList.add('hidden');
+      document.getElementById('nav-workout-dot').classList.add('hidden');
+
+      alert("トレーニングが記録されました！お疲れ様でした！👏");
+      switchTab('dashboard');
+    }
+
+    // ワークアウト破棄
+    function discardWorkout() {
+      if (confirm("現在の記録を破棄して終了しますか？")) {
+        state.activeWorkout = null;
+        if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
+        document.getElementById('floating-timer-btn').classList.add('hidden');
+        document.getElementById('nav-workout-dot').classList.add('hidden');
+        switchTab('dashboard');
+      }
+    }
+
+    // --- レストタイマー機能 ---
+    function startRestTimer() {
+      const restSec = parseInt(document.getElementById('rest-time-select').value);
+      restTimerValue = restSec;
+      isRestTimerRunning = true;
+      updateRestTimerBtnText();
+
+      if (restTimerInterval) clearInterval(restTimerInterval);
+      restTimerInterval = setInterval(() => {
+        if (restTimerValue > 0) {
+          restTimerValue--;
+          updateRestTimerBtnText();
+        } else {
+          clearInterval(restTimerInterval);
+          isRestTimerRunning = false;
+          updateRestTimerBtnText();
+          // モバイル向けの簡易バイブレーション・通知
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        }
+      }, 1000);
+    }
+
+    function toggleRestTimer() {
+      if (isRestTimerRunning) {
+        clearInterval(restTimerInterval);
+        isRestTimerRunning = false;
+        document.getElementById('rest-timer-btn').innerText = "再開";
+      } else {
+        startRestTimer();
+      }
+    }
+
+    function updateRestTimerBtnText() {
+      const btn = document.getElementById('rest-timer-btn');
+      if (restTimerValue > 0) {
+        btn.innerText = `${restTimerValue}秒 (${isRestTimerRunning ? '一時停止' : '再開'})`;
+        btn.className = "bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1 rounded-lg font-bold";
+      } else {
+        btn.innerText = "スタート";
+        btn.className = "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 py-1 rounded-lg font-bold";
+      }
+    }
+
+
+    // =========================================================================
+    // 種目選択モーダル & カスタム種目作成
+    // =========================================================================
+    function openExerciseModal() {
+      document.getElementById('exercise-modal').classList.remove('hidden');
+      filterExercises();
+    }
+
+    function closeExerciseModal() {
+      document.getElementById('exercise-modal').classList.add('hidden');
+    }
+
+    function setExerciseCategoryFilter(category) {
+      state.exerciseFilterCategory = category;
+      
+      // ボタンのアクティブ表現
+      document.querySelectorAll('.category-filter-btn').forEach(btn => {
+        if (btn.innerText === category) {
+          btn.className = "category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-orange-500/10 text-orange-400 border-orange-500/30 font-bold";
+        } else {
+          btn.className = "category-filter-btn px-2.5 py-1 rounded-full shrink-0 border bg-slate-950 text-slate-400 border-slate-800";
+        }
+      });
+
+      filterExercises();
+    }
+
+    function filterExercises() {
+      const searchInput = document.getElementById('exercise-search').value.toLowerCase();
+      const listContainer = document.getElementById('modal-exercises-list');
+      listContainer.innerHTML = '';
+
+      const filtered = getAllExercises().filter(ex => {
+        const matchesCategory = state.exerciseFilterCategory === 'すべて' || ex.category === state.exerciseFilterCategory;
+        const matchesSearch = ex.name.toLowerCase().includes(searchInput);
+        return matchesCategory && matchesSearch;
+      });
+
+      filtered.forEach(ex => {
+        const isAlreadyAdded = state.activeWorkout?.exercises.some(activeEx => activeEx.id === ex.id);
+        const row = document.createElement('div');
+        row.className = "flex justify-between items-center bg-slate-950/50 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition";
+        row.innerHTML = `
+          <div>
+            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2">${ex.category}</span>
+            <span class="text-sm font-semibold text-slate-200">${ex.name}</span>
+          </div>
+          <button 
+            onclick="addExerciseToWorkout('${ex.id}')"
+            ${isAlreadyAdded ? 'disabled' : ''}
+            class="text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+              isAlreadyAdded 
+                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed' 
+                : 'bg-orange-500 hover:bg-orange-600 text-slate-950'
+            }"
+          >
+            ${isAlreadyAdded ? '追加済' : '追加'}
+          </button>
+        `;
+        listContainer.appendChild(row);
+      });
+    }
+
+    function addExerciseToWorkout(id) {
+      if (!state.activeWorkout) return;
+      const base = getAllExercises().find(ex => ex.id === id);
+      if (!base) return;
+
+      const newEx = {
+        id: base.id,
+        name: base.name,
+        category: base.category,
+        type: base.type,
+        sets: [
+          base.type === 'duration' 
+            ? { weight: 0, duration: 60, done: false }
+            : { weight: 0, reps: 10, done: false }
+        ]
+      };
+
+      state.activeWorkout.exercises.push(newEx);
+      closeExerciseModal();
+      renderWorkoutScreen();
+    }
+
+    function createCustomExercise() {
+      const nameInput = document.getElementById('custom-exercise-name');
+      const catSelect = document.getElementById('custom-exercise-category');
+      const typeRadio = document.querySelector('input[name="custom-type"]:checked');
+
+      const name = nameInput.value.trim();
+      if (!name) {
+        alert("種目名を入力してください。");
+        return;
+      }
+
+      const newEx = {
+        id: 'custom-' + Date.now(),
+        name: name,
+        category: catSelect.value,
+        type: typeRadio.value
+      };
+
+      state.customExercises.push(newEx);
+      saveState();
+
+      nameInput.value = '';
+      filterExercises();
+    }
+
+
+    // =========================================================================
+    // ルーティン管理画面
+    // =========================================================================
+    function renderRoutines() {
+      const container = document.getElementById('routines-list');
+      container.innerHTML = '';
+
+      state.routines.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "bg-slate-800/40 border border-slate-800 rounded-3xl p-5 hover:bg-slate-800/60 transition space-y-4 relative group";
+        
+        // 構成種目の名前解決
+        const exercisesInRoutine = item.exercises.map(id => {
+          const found = getAllExercises().find(ex => ex.id === id);
+          return found ? found : { name: '削除された運動', category: '不明' };
+        });
+
+        card.innerHTML = `
+          <button onclick="deleteRoutine('${item.id}')" class="absolute top-4 right-4 text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+          <div>
+            <h3 class="font-extrabold text-white text-lg">${item.name}</h3>
+            ${item.description ? `<p class="text-xs text-slate-400 mt-1">${item.description}</p>` : ''}
+          </div>
+
+          <div class="bg-slate-900/40 rounded-2xl p-3 border border-slate-800/60">
+            <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">構成種目</h4>
+            <ul class="space-y-2">
+              ${exercisesInRoutine.map(ex => `
+                <li class="flex items-center gap-2 text-sm text-slate-300">
+                  <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 shrink-0"></i>
+                  <span>${ex.name}</span>
+                  <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded ml-auto">${ex.category}</span>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+
+          <button onclick="startRoutineWorkout('${item.id}')" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-sm py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-orange-500/10">
+            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+            このルーティンを開始
+          </button>
+        `;
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function startRoutineWorkout(routineId) {
+      const routine = state.routines.find(r => r.id === routineId);
+      if (!routine) return;
+      startWorkout(routine.name, routine.exercises);
+    }
+
+    function deleteRoutine(routineId) {
+      if (confirm("このルーティンを削除しますか？")) {
+        state.routines = state.routines.filter(r => r.id !== routineId);
+        saveState();
+        renderRoutines();
+      }
+    }
+
+    // ルーティン作成モーダルの表示制御
+    function openCreateRoutineModal() {
+      document.getElementById('routine-modal').classList.remove('hidden');
+      const container = document.getElementById('routine-creation-exercises-list');
+      container.innerHTML = '';
+
+      getAllExercises().forEach(ex => {
+        const item = document.createElement('label');
+        item.className = "flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer hover:bg-slate-800/40 text-slate-300";
+        item.innerHTML = `
+          <input type="checkbox" name="routine-ex-checkbox" value="${ex.id}" class="rounded text-orange-500 focus:ring-orange-500 bg-slate-900 border-slate-700" />
+          <div class="flex-1 flex justify-between">
+            <span>${ex.name}</span>
+            <span class="text-[9px] text-slate-500">${ex.category}</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function closeCreateRoutineModal() {
+      document.getElementById('routine-modal').classList.add('hidden');
+    }
+
+    function saveNewRoutine() {
+      const nameInput = document.getElementById('new-routine-name');
+      const descInput = document.getElementById('new-routine-desc');
+      const checkedBoxes = document.querySelectorAll('input[name="routine-ex-checkbox"]:checked');
+
+      const name = nameInput.value.trim();
+      if (!name) {
+        alert("ルーティン名を入力してください。");
+        return;
+      }
+
+      const exerciseIds = Array.from(checkedBoxes).map(box => box.value);
+      if (exerciseIds.length === 0) {
+        alert("少なくとも1つの種目を選択してください。");
+        return;
+      }
+
+      const newRoutine = {
+        id: 'rot-' + Date.now(),
+        name: name,
+        description: descInput.value.trim(),
+        exercises: exerciseIds
+      };
+
+      state.routines.push(newRoutine);
+      saveState();
+
+      // リセットして閉じる
+      nameInput.value = '';
+      descInput.value = '';
+      closeCreateRoutineModal();
+      renderRoutines();
+    }
+
+
+    // =========================================================================
+    // 過去履歴の表示・操作
+    // =========================================================================
+    function renderHistory() {
+      const picker = document.getElementById('history-date-picker');
+      picker.value = state.selectedHistoryDate;
+
+      loadHistoryForSelectedDate();
+    }
+
+    function adjustHistoryDate(days) {
+      const current = new Date(state.selectedHistoryDate);
+      current.setDate(current.getDate() + days);
+      state.selectedHistoryDate = current.toISOString().split('T')[0];
+      renderHistory();
+    }
+
+    function loadHistoryForSelectedDate() {
+      const picker = document.getElementById('history-date-picker');
+      state.selectedHistoryDate = picker.value;
+
+      const container = document.getElementById('history-detail-container');
+      container.innerHTML = '';
+
+      const dayLogs = state.history.filter(h => h.date === state.selectedHistoryDate);
+
+      if (dayLogs.length === 0) {
+        container.innerHTML = `
+          <div class="bg-slate-800/20 border border-dashed border-slate-800 rounded-3xl p-8 text-center text-slate-400">
+            <p class="text-sm">この日の筋トレ記録はありません</p>
+          </div>
+        `;
+        return;
+      }
+
+      dayLogs.forEach(log => {
+        const card = document.createElement('div');
+        card.className = "bg-slate-800/40 border border-slate-800 rounded-3xl p-5 space-y-4";
+        
+        card.innerHTML = `
+          <div class="flex justify-between items-start border-b border-slate-800/80 pb-3">
+            <div>
+              <h3 class="font-extrabold text-white text-lg">${log.exercises.length}種目のワークアウト</h3>
+              <p class="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                時間: ${formatTime(log.duration)} • 総ボリューム: ${log.totalVolume}kg
+              </p>
+            </div>
+            <button onclick="deleteHistoryEntry('${log.id}')" class="text-slate-500 hover:text-rose-400 p-1">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            ${log.exercises.map(ex => `
+              <div class="space-y-1.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${ex.category}</span>
+                  <span class="font-bold text-sm text-slate-200">${ex.name}</span>
+                </div>
+                <div class="flex flex-wrap gap-2 pl-2">
+                  ${ex.sets.map((set, sIdx) => `
+                    <span class="text-xs bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-400">
+                      ${sIdx + 1}S: <strong class="text-slate-200">${set.weight}kg</strong> × <strong class="text-slate-200">${set.reps || set.duration}</strong>
+                    </span>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function deleteHistoryEntry(logId) {
+      if (confirm("この履歴データを完全に削除しますか？")) {
+        state.history = state.history.filter(h => h.id !== logId);
+        saveState();
+        renderHistory();
+      }
+    }
+
+
+    // =========================================================================
+    // アナリティクス・統計分析
+    // =========================================================================
+    function renderAnalytics() {
+      const totalCountSpan = document.getElementById('analytics-total-count');
+      const totalSetsSpan = document.getElementById('analytics-total-sets');
+      const chartContainer = document.getElementById('analytics-chart-container');
+      const adviceText = document.getElementById('analytics-advice-text');
+
+      totalCountSpan.innerText = `${state.history.length}回`;
+
+      let totalSets = 0;
+      const categoryCounts = {};
+
+      state.history.forEach(log => {
+        log.exercises.forEach(ex => {
+          const setsCount = ex.sets.length;
+          totalSets += setsCount;
+          categoryCounts[ex.category] = (categoryCounts[ex.category] || 0) + setsCount;
+        });
+      });
+
+      totalSetsSpan.innerText = `${totalSets}セット`;
+      chartContainer.innerHTML = '';
+
+      if (totalSets === 0) {
+        chartContainer.innerHTML = `
+          <p class="text-xs text-slate-400 text-center py-6">分析するための記録がまだ十分にありません。</p>
+        `;
+        adviceText.innerText = "まずは今日のワークアウトを完了して、記録を蓄積しましょう！";
+        return;
+      }
+
+      // カテゴリ割合の算出
+      const sortedCategories = Object.keys(categoryCounts).map(cat => ({
+        name: cat,
+        count: categoryCounts[cat],
+        percentage: Math.round((categoryCounts[cat] / totalSets) * 100)
+      })).sort((a, b) => b.count - a.count);
+
+      // 進捗バーの描写
+      sortedCategories.forEach(item => {
+        const row = document.createElement('div');
+        row.className = "space-y-1";
+        row.innerHTML = `
+          <div class="flex justify-between text-xs font-semibold">
+            <span class="text-slate-300">${item.name}</span>
+            <span class="text-orange-400">${item.percentage}% (${item.count}セット)</span>
+          </div>
+          <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
+            <div class="bg-gradient-to-r from-orange-500 to-amber-400 h-full rounded-full" style="width: ${item.percentage}%"></div>
+          </div>
+        `;
+        chartContainer.appendChild(row);
+      });
+
+      // AIアドバイスの自動変更
+      if (sortedCategories.length > 0) {
+        const topCat = sortedCategories[0].name;
+        adviceText.innerText = `最近は特に「${topCat}」を重点的に鍛えることができています！ 全身のプロポーションと筋力バランスを最高に高めるために、今後は他の部位にも均等に刺激を与えるセッションを作ってみるのもおすすめです。`;
+      }
+    }
+  </script>
+</body>
+</html>
