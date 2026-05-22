@@ -237,7 +237,7 @@
     <div id="tab-history" class="tab-content hidden space-y-6">
       <div>
         <h2 class="text-xl font-bold text-white">トレーニング履歴</h2>
-        <p class="text-xs text-slate-400">カレンダーから日付を選んで過去の成果を確認できます</p>
+        <p class="text-xs text-slate-400">カレンダーから日付を選んで過去の成果を確認・編集できます</p>
       </div>
 
       <!-- 日付ナビゲーター -->
@@ -439,6 +439,36 @@
 
 
   <!-- ==========================================
+      モーダル3: 履歴データのあとから編集モーダル (NEW!)
+      ========================================== -->
+  <div id="edit-history-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 space-y-4 animate-scaleUp shadow-2xl flex flex-col max-h-[80vh]">
+      <div class="flex justify-between items-center shrink-0">
+        <h3 class="font-extrabold text-white text-lg">履歴レコードの書き換え</h3>
+        <button onclick="closeEditHistoryModal()" class="text-slate-400 hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- スクロール可能な編集領域 -->
+      <div id="edit-history-scroll-container" class="flex-1 overflow-y-auto space-y-4 pr-1 no-scrollbar">
+        <!-- JSで動的に種目とセットを構成します -->
+      </div>
+
+      <!-- 保存ボタン類 -->
+      <div class="flex gap-2 shrink-0 pt-2 border-t border-slate-800/80">
+        <button onclick="closeEditHistoryModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition text-sm">
+          キャンセル
+        </button>
+        <button onclick="saveEditedHistory()" class="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold py-3 rounded-xl transition text-sm">
+          変更を書き換える
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==========================================
       アプリケーション ロジック (Vanilla JS)
       ========================================== -->
   <script>
@@ -486,8 +516,8 @@
         duration: 2700,
         totalVolume: 2400,
         exercises: [
-          { name: 'ベンチプレス', category: '胸', sets: [{ weight: 60, reps: 10 }, { weight: 60, reps: 10 }, { weight: 65, reps: 8 }] },
-          { name: 'インクライン・プレス', category: '胸', sets: [{ weight: 20, reps: 10 }, { weight: 20, reps: 10 }] }
+          { name: 'ベンチプレス', category: '胸', type: 'weight', sets: [{ weight: 60, reps: 10 }, { weight: 60, reps: 10 }, { weight: 65, reps: 8 }] },
+          { name: 'インクライン・プレス', category: '胸', type: 'weight', sets: [{ weight: 20, reps: 10 }, { weight: 20, reps: 10 }] }
         ]
       },
       {
@@ -496,8 +526,8 @@
         duration: 3300,
         totalVolume: 3200,
         exercises: [
-          { name: 'スクワット', category: '脚', sets: [{ weight: 70, reps: 10 }, { weight: 80, reps: 8 }, { weight: 80, reps: 8 }] },
-          { name: 'レッグレイズ', category: '腹筋', sets: [{ weight: 0, reps: 15 }, { weight: 0, reps: 15 }] }
+          { name: 'スクワット', category: '脚', type: 'weight', sets: [{ weight: 70, reps: 10 }, { weight: 80, reps: 8 }, { weight: 80, reps: 8 }] },
+          { name: 'レッグレイズ', category: '腹筋', type: 'reps', sets: [{ weight: 0, reps: 15 }, { weight: 0, reps: 15 }] }
         ]
       },
       {
@@ -506,8 +536,8 @@
         duration: 1800,
         totalVolume: 1450,
         exercises: [
-          { name: 'ショルダープレス', category: '肩', sets: [{ weight: 15, reps: 10 }, { weight: 15, reps: 10 }] },
-          { name: 'サイドレイズ', category: '肩', sets: [{ weight: 7.5, reps: 15 }, { weight: 7.5, reps: 15 }] }
+          { name: 'ショルダープレス', category: '肩', type: 'weight', sets: [{ weight: 15, reps: 10 }, { weight: 15, reps: 10 }] },
+          { name: 'サイドレイズ', category: '肩', type: 'weight', sets: [{ weight: 7.5, reps: 15 }, { weight: 7.5, reps: 15 }] }
         ]
       }
     ];
@@ -522,6 +552,10 @@
       selectedHistoryDate: new Date().toISOString().split('T')[0],
       exerciseFilterCategory: 'すべて',
       exerciseSearchQuery: '',
+      
+      // 履歴編集の一時作業スペース (NEW!)
+      editingHistoryId: null,
+      editingHistoryData: null 
     };
 
     // タイマー関連の参照変数
@@ -927,6 +961,7 @@
           savedExercises.push({
             name: ex.name,
             category: ex.category,
+            type: ex.type || 'weight',
             sets: completedSets.map(s => ({
               weight: s.weight || 0,
               reps: s.reps || 0,
@@ -1310,9 +1345,15 @@
                 時間: ${formatTime(log.duration)} • 総ボリューム: ${log.totalVolume}kg
               </p>
             </div>
-            <button onclick="deleteHistoryEntry('${log.id}')" class="text-slate-500 hover:text-rose-400 p-1">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
+            <div class="flex gap-1.5 shrink-0">
+              <!-- 編集(書き換え)ボタン -->
+              <button onclick="openEditHistoryModal('${log.id}')" class="text-slate-500 hover:text-orange-400 p-1" title="履歴を編集">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteHistoryEntry('${log.id}')" class="text-slate-500 hover:text-rose-400 p-1" title="履歴を削除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
           </div>
 
           <div class="space-y-4">
@@ -1344,6 +1385,152 @@
         state.history = state.history.filter(h => h.id !== logId);
         saveState();
         renderHistory();
+      }
+    }
+
+
+    // =========================================================================
+    // 履歴レコードの編集機能 (NEW!)
+    // =========================================================================
+    function openEditHistoryModal(logId) {
+      const originalLog = state.history.find(h => h.id === logId);
+      if (!originalLog) return;
+
+      // 安全のためにディープコピーを作ってから編集します
+      state.editingHistoryId = logId;
+      state.editingHistoryData = JSON.parse(JSON.stringify(originalLog));
+
+      renderEditHistoryModalContent();
+      document.getElementById('edit-history-modal').classList.remove('hidden');
+    }
+
+    function renderEditHistoryModalContent() {
+      const container = document.getElementById('edit-history-scroll-container');
+      container.innerHTML = '';
+
+      state.editingHistoryData.exercises.forEach((ex, exIdx) => {
+        const exBlock = document.createElement('div');
+        exBlock.className = "bg-slate-950/40 border border-slate-800 p-4 rounded-2xl space-y-3";
+
+        let setsMarkup = '';
+        ex.sets.forEach((set, sIdx) => {
+          const isDuration = ex.type === 'duration';
+          const valField = isDuration ? (set.duration || 0) : (set.reps || 0);
+          const placeholder = isDuration ? '秒' : 'レップ';
+
+          setsMarkup += `
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-slate-500 w-6">${sIdx + 1}S</span>
+              
+              <!-- 重量入力 -->
+              <div class="flex-1 flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
+                <input 
+                  type="number" 
+                  value="${set.weight}" 
+                  oninput="updateEditHistorySetField(${exIdx}, ${sIdx}, 'weight', this.value)"
+                  class="bg-transparent text-sm text-center text-white font-bold w-full focus:outline-none"
+                  placeholder="0"
+                />
+                <span class="text-[10px] text-slate-400 ml-1 shrink-0">kg</span>
+              </div>
+
+              <!-- レップ/時間入力 -->
+              <div class="flex-1 flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
+                <input 
+                  type="number" 
+                  value="${valField}" 
+                  oninput="updateEditHistorySetField(${exIdx}, ${sIdx}, '${isDuration ? 'duration' : 'reps'}', this.value)"
+                  class="bg-transparent text-sm text-center text-white font-bold w-full focus:outline-none"
+                  placeholder="0"
+                />
+                <span class="text-[10px] text-slate-400 ml-1 shrink-0">${placeholder}</span>
+              </div>
+            </div>
+          `;
+        });
+
+        exBlock.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${ex.category}</span>
+            <span class="text-sm font-bold text-slate-200">${ex.name}</span>
+          </div>
+          <div class="space-y-2">
+            ${setsMarkup}
+          </div>
+          <div class="flex gap-2 pt-1 border-t border-slate-800/30 text-[10px] font-bold">
+            <button onclick="addSetToEditHistory(${exIdx})" class="flex-1 py-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-700">
+              セット追加
+            </button>
+            <button onclick="removeLastSetFromEditHistory(${exIdx})" class="px-3 py-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-700">
+              削減
+            </button>
+          </div>
+        `;
+
+        container.appendChild(exBlock);
+      });
+    }
+
+    function updateEditHistorySetField(exIdx, sIdx, field, val) {
+      if (!state.editingHistoryData) return;
+      state.editingHistoryData.exercises[exIdx].sets[sIdx][field] = parseFloat(val) || 0;
+    }
+
+    function addSetToEditHistory(exIdx) {
+      if (!state.editingHistoryData) return;
+      const sets = state.editingHistoryData.exercises[exIdx].sets;
+      const lastSet = sets[sets.length - 1] || { weight: 0, reps: 10, duration: 60 };
+      
+      sets.push({
+        weight: lastSet.weight,
+        reps: lastSet.reps,
+        duration: lastSet.duration
+      });
+      renderEditHistoryModalContent();
+    }
+
+    function removeLastSetFromEditHistory(exIdx) {
+      if (!state.editingHistoryData) return;
+      const sets = state.editingHistoryData.exercises[exIdx].sets;
+      if (sets.length > 1) {
+        sets.pop();
+        renderEditHistoryModalContent();
+      } else {
+        alert("最低1セットの記録は必要です。種目自体を取り除く場合は、種目内の値を0にするか、記録全体を削除してください。");
+      }
+    }
+
+    function closeEditHistoryModal() {
+      document.getElementById('edit-history-modal').classList.add('hidden');
+      state.editingHistoryId = null;
+      state.editingHistoryData = null;
+    }
+
+    function saveEditedHistory() {
+      if (!state.editingHistoryId || !state.editingHistoryData) return;
+
+      // 総挙上重量(総ボリューム)の更新計算
+      let newTotalVolume = 0;
+      state.editingHistoryData.exercises.forEach(ex => {
+        ex.sets.forEach(set => {
+          newTotalVolume += (set.weight * (set.reps || 1));
+        });
+      });
+      state.editingHistoryData.totalVolume = newTotalVolume;
+
+      // 本体のhistory配列上のインデックスを走査して置換
+      const targetIndex = state.history.findIndex(h => h.id === state.editingHistoryId);
+      if (targetIndex !== -1) {
+        state.history[targetIndex] = state.editingHistoryData;
+        saveState();
+        
+        // 各種UIのリアルタイム再同期
+        renderHistory();
+        renderDashboard();
+        renderAnalytics();
+
+        closeEditHistoryModal();
+        alert("履歴データの書き換え・保存が成功しました！💪");
       }
     }
 
