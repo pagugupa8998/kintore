@@ -240,7 +240,7 @@
         <p class="text-xs text-slate-400">日付を選んで過去のワークアウトを振り返り・編集できます</p>
       </div>
 
-      <!-- 新しい月間カレンダーコントローラー -->
+      <!-- 月間カレンダーコントローラー -->
       <div class="bg-slate-800/80 border border-slate-700 rounded-3xl p-4 shadow-xl space-y-4">
         <div class="flex items-center justify-between px-2">
           <button onclick="changeCalendarMonth(-1)" class="p-2 bg-slate-700/60 hover:bg-slate-700 rounded-xl text-slate-200 transition">
@@ -475,7 +475,15 @@
 
       <!-- スクロール可能な編集領域 -->
       <div id="edit-history-scroll-container" class="flex-1 overflow-y-auto space-y-4 pr-1 no-scrollbar">
-        <!-- JSで動的に種目とセットを構成します -->
+        <!-- JSで動的に種目とセットを構成 -->
+      </div>
+
+      <!-- 編集用・種目追加ボタン -->
+      <div class="px-1 py-2 border-t border-slate-800/60 shrink-0">
+        <button onclick="openHistoryAddExerciseModal()" class="w-full bg-slate-800 hover:bg-slate-750 text-orange-400 border border-dashed border-slate-750 rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          種目を追加する
+        </button>
       </div>
 
       <!-- 保存ボタン類 -->
@@ -486,6 +494,31 @@
         <button onclick="saveEditedHistory()" class="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold py-3 rounded-xl transition text-sm">
           変更を書き換える
         </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==========================================
+      モーダル4: 履歴編集中の種目追加モーダル
+      ========================================== -->
+  <div id="history-add-exercise-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 space-y-4 animate-scaleUp shadow-2xl">
+      <div class="flex justify-between items-center">
+        <h3 class="font-extrabold text-white text-lg">履歴に種目を追加</h3>
+        <button onclick="closeHistoryAddExerciseModal()" class="text-slate-400 hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- 検索 -->
+      <div class="space-y-2">
+        <input type="text" id="history-ex-search" oninput="filterHistoryExercises()" placeholder="種目名で検索..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:ring-1 focus:ring-orange-500 focus:outline-none" />
+      </div>
+
+      <!-- リスト -->
+      <div id="history-add-exercise-list" class="max-h-60 overflow-y-auto space-y-2 pr-1 no-scrollbar">
+        <!-- JSで動的に検索結果を挿入 -->
       </div>
     </div>
   </div>
@@ -1063,12 +1096,13 @@
           clearInterval(restTimerInterval);
           isRestTimerRunning = false;
           updateRestTimerBtnText();
-          // モバイル向けの簡易バイブレーション・通知
+          // バイブレーション（サポートデバイスのみ）
           if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
         }
       }, 1000);
     }
 
+    // タイマーのON/OFF
     function toggleRestTimer() {
       if (isRestTimerRunning) {
         clearInterval(restTimerInterval);
@@ -1092,7 +1126,7 @@
 
 
     // =========================================================================
-    // 種目選択モーダル & カスタム種目作成
+    // 種目選択モーダル & カスタム種目作成・削除
     // =========================================================================
     function openExerciseModal() {
       document.getElementById('exercise-modal').classList.remove('hidden');
@@ -1131,27 +1165,42 @@
 
       filtered.forEach(ex => {
         const isAlreadyAdded = state.activeWorkout?.exercises.some(activeEx => activeEx.id === ex.id);
+        const isCustom = ex.id.startsWith('custom-');
+        
+        let deleteBtnHtml = '';
+        if (isCustom) {
+          deleteBtnHtml = `
+            <button onclick="deleteCustomExercise('${ex.id}', event)" class="text-slate-500 hover:text-rose-400 p-1.5 mr-1" title="この種目を削除">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          `;
+        }
+
         const row = document.createElement('div');
         row.className = "flex justify-between items-center bg-slate-950/50 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition";
         row.innerHTML = `
-          <div>
-            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2">${ex.category}</span>
-            <span class="text-sm font-semibold text-slate-200">${ex.name}</span>
+          <div class="flex items-center flex-1 min-w-0">
+            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2 shrink-0">${ex.category}</span>
+            <span class="text-sm font-semibold text-slate-200 truncate">${ex.name}</span>
           </div>
-          <button 
-            onclick="addExerciseToWorkout('${ex.id}')"
-            ${isAlreadyAdded ? 'disabled' : ''}
-            class="text-xs px-2.5 py-1 rounded-lg font-bold transition ${
-              isAlreadyAdded 
-                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed' 
-                : 'bg-orange-500 hover:bg-orange-600 text-slate-950'
-            }"
-          >
-            ${isAlreadyAdded ? '追加済' : '追加'}
-          </button>
+          <div class="flex items-center shrink-0">
+            ${deleteBtnHtml}
+            <button 
+              onclick="addExerciseToWorkout('${ex.id}')"
+              ${isAlreadyAdded ? 'disabled' : ''}
+              class="text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                isAlreadyAdded 
+                  ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed' 
+                  : 'bg-orange-500 hover:bg-orange-600 text-slate-950'
+              }"
+            >
+              ${isAlreadyAdded ? '追加済' : '追加'}
+            </button>
+          </div>
         `;
         listContainer.appendChild(row);
       });
+      lucide.createIcons();
     }
 
     function addExerciseToWorkout(id) {
@@ -1199,6 +1248,16 @@
 
       nameInput.value = '';
       filterExercises();
+    }
+
+    // 自作したカスタム種目の削除
+    function deleteCustomExercise(id, event) {
+      if (event) event.stopPropagation();
+      if (confirm("この自作種目を完全に削除しますか？\n(削除すると過去に作成したルーティンに影響が出る場合があります)")) {
+        state.customExercises = state.customExercises.filter(ex => ex.id !== id);
+        saveState();
+        filterExercises();
+      }
     }
 
 
@@ -1427,19 +1486,6 @@
       renderHistoryCalendar();
     }
 
-    // 日付履歴の増減
-    function adjustHistoryDate(days) {
-      const current = new Date(state.selectedHistoryDate);
-      current.setDate(current.getDate() + days);
-      state.selectedHistoryDate = current.toISOString().split('T')[0];
-
-      // 年月も追従
-      state.currentCalYear = current.getFullYear();
-      state.currentCalMonth = current.getMonth() + 1;
-
-      renderHistory();
-    }
-
     // 選択された日付詳細ログの読み込み
     function loadHistoryForSelectedDate() {
       document.getElementById('history-selected-date-label').innerText = state.selectedHistoryDate;
@@ -1511,18 +1557,20 @@
         state.history = state.history.filter(h => h.id !== logId);
         saveState();
         renderHistory();
+        renderDashboard();
+        renderAnalytics();
       }
     }
 
 
     // =========================================================================
-    // 履歴レコードの編集機能
+    // 履歴レコードの編集機能 (種目の追加/削除に対応)
     // =========================================================================
     function openEditHistoryModal(logId) {
       const originalLog = state.history.find(h => h.id === logId);
       if (!originalLog) return;
 
-      // 安全のためにディープコピーを作ってから編集します
+      // ディープコピーを作ってから編集
       state.editingHistoryId = logId;
       state.editingHistoryData = JSON.parse(JSON.stringify(originalLog));
 
@@ -1533,6 +1581,11 @@
     function renderEditHistoryModalContent() {
       const container = document.getElementById('edit-history-scroll-container');
       container.innerHTML = '';
+
+      if (!state.editingHistoryData || state.editingHistoryData.exercises.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">種目が登録されていません。「種目を追加」から選んでください。</p>`;
+        return;
+      }
 
       state.editingHistoryData.exercises.forEach((ex, exIdx) => {
         const exBlock = document.createElement('div');
@@ -1578,7 +1631,12 @@
         exBlock.innerHTML = `
           <div class="flex justify-between items-center">
             <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${ex.category}</span>
-            <span class="text-sm font-bold text-slate-200">${ex.name}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-bold text-slate-200">${ex.name}</span>
+              <button onclick="removeExerciseFromEditHistory(${exIdx})" class="text-slate-500 hover:text-rose-400 p-1" title="この種目を削除">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
           </div>
           <div class="space-y-2">
             ${setsMarkup}
@@ -1595,6 +1653,7 @@
 
         container.appendChild(exBlock);
       });
+      lucide.createIcons();
     }
 
     function updateEditHistorySetField(exIdx, sIdx, field, val) {
@@ -1602,6 +1661,7 @@
       state.editingHistoryData.exercises[exIdx].sets[sIdx][field] = parseFloat(val) || 0;
     }
 
+    // 編集中の履歴へのセット追加
     function addSetToEditHistory(exIdx) {
       if (!state.editingHistoryData) return;
       const sets = state.editingHistoryData.exercises[exIdx].sets;
@@ -1615,6 +1675,7 @@
       renderEditHistoryModalContent();
     }
 
+    // 編集中の履歴から最後のセットを削減
     function removeLastSetFromEditHistory(exIdx) {
       if (!state.editingHistoryData) return;
       const sets = state.editingHistoryData.exercises[exIdx].sets;
@@ -1623,6 +1684,15 @@
         renderEditHistoryModalContent();
       } else {
         alert("最低1セットの記録は必要です。");
+      }
+    }
+
+    // 編集中の履歴から種目自体を削除
+    function removeExerciseFromEditHistory(exIdx) {
+      if (!state.editingHistoryData) return;
+      if (confirm(`「${state.editingHistoryData.exercises[exIdx].name}」の全セットをこの日の履歴から削除しますか？`)) {
+        state.editingHistoryData.exercises.splice(exIdx, 1);
+        renderEditHistoryModalContent();
       }
     }
 
@@ -1635,6 +1705,11 @@
     function saveEditedHistory() {
       if (!state.editingHistoryId || !state.editingHistoryData) return;
 
+      if (state.editingHistoryData.exercises.length === 0) {
+        alert("種目が1つもありません。不要な履歴の場合は、カレンダー画面から履歴ごと削除をしてください。");
+        return;
+      }
+
       // 総挙上重量(総ボリューム)の更新計算
       let newTotalVolume = 0;
       state.editingHistoryData.exercises.forEach(ex => {
@@ -1644,7 +1719,7 @@
       });
       state.editingHistoryData.totalVolume = newTotalVolume;
 
-      // 本体のhistory配列上のインデックスを走査して置換
+      // 本体historyの特定インデックスと置換
       const targetIndex = state.history.findIndex(h => h.id === state.editingHistoryId);
       if (targetIndex !== -1) {
         state.history[targetIndex] = state.editingHistoryData;
@@ -1658,6 +1733,77 @@
         closeEditHistoryModal();
         alert("履歴データの書き換え・保存が成功しました！💪");
       }
+    }
+
+    // =========================================================================
+    // 履歴編集モーダル用: 種目の新規追加
+    // =========================================================================
+    function openHistoryAddExerciseModal() {
+      document.getElementById('history-add-exercise-modal').classList.remove('hidden');
+      document.getElementById('history-ex-search').value = '';
+      filterHistoryExercises();
+    }
+
+    function closeHistoryAddExerciseModal() {
+      document.getElementById('history-add-exercise-modal').classList.add('hidden');
+    }
+
+    function filterHistoryExercises() {
+      const searchInput = document.getElementById('history-ex-search').value.toLowerCase();
+      const listContainer = document.getElementById('history-add-exercise-list');
+      listContainer.innerHTML = '';
+
+      const filtered = getAllExercises().filter(ex => {
+        return ex.name.toLowerCase().includes(searchInput);
+      });
+
+      filtered.forEach(ex => {
+        // すでに現在の履歴データに追加されているかチェック
+        const isAlreadyAdded = state.editingHistoryData?.exercises.some(e => e.name === ex.name);
+
+        const row = document.createElement('div');
+        row.className = "flex justify-between items-center bg-slate-950/50 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition";
+        row.innerHTML = `
+          <div>
+            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2 shrink-0">${ex.category}</span>
+            <span class="text-sm font-semibold text-slate-200">${ex.name}</span>
+          </div>
+          <button 
+            onclick="addExerciseToHistoryData('${ex.id}')"
+            ${isAlreadyAdded ? 'disabled' : ''}
+            class="text-xs px-2.5 py-1 rounded-lg font-bold transition shrink-0 ${
+              isAlreadyAdded 
+                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed' 
+                : 'bg-orange-500 hover:bg-orange-600 text-slate-950'
+            }"
+          >
+            ${isAlreadyAdded ? '追加済' : '追加'}
+          </button>
+        `;
+        listContainer.appendChild(row);
+      });
+    }
+
+    function addExerciseToHistoryData(id) {
+      if (!state.editingHistoryData) return;
+      const base = getAllExercises().find(ex => ex.id === id);
+      if (!base) return;
+
+      // 新規追加時のデフォルトの1セット
+      const newEx = {
+        name: base.name,
+        category: base.category,
+        type: base.type || 'weight',
+        sets: [
+          base.type === 'duration' 
+            ? { weight: 0, duration: 60 }
+            : { weight: 0, reps: 10 }
+        ]
+      };
+
+      state.editingHistoryData.exercises.push(newEx);
+      closeHistoryAddExerciseModal();
+      renderEditHistoryModalContent();
     }
 
 
@@ -1726,4 +1872,3 @@
   </script>
 </body>
 </html>
-
