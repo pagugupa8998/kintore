@@ -131,6 +131,24 @@
           <!-- JSで自動挿入 -->
         </div>
       </div>
+
+      <!-- データのバックアップ -->
+      <div class="bg-slate-800/30 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <h3 class="font-bold text-slate-200 flex items-center gap-2">
+          <i data-lucide="save" class="w-5 h-5 text-emerald-400"></i>
+          データのバックアップ
+        </h3>
+        <p class="text-xs text-slate-400 leading-relaxed">記録はこのブラウザの中にだけ保存されています。ときどき書き出しておくと、機種変更やデータ削除のときも復元できます。</p>
+        <div class="flex gap-3">
+          <button onclick="exportBackup()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-sm py-3 px-4 rounded-xl transition">
+            書き出す
+          </button>
+          <button onclick="document.getElementById('backup-import-file').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-sm py-3 px-4 rounded-xl transition">
+            読み込む
+          </button>
+          <input type="file" id="backup-import-file" accept=".json,application/json" class="hidden" onchange="importBackup(event)" />
+        </div>
+      </div>
     </div>
 
 
@@ -311,6 +329,42 @@
         </h3>
         <div id="analytics-chart-container" class="space-y-3.5">
           <!-- JSでプログレスバーを動的生成 -->
+        </div>
+      </div>
+
+      <!-- 部位別ドーナツグラフ -->
+      <div class="bg-slate-800/40 border border-slate-800 rounded-3xl p-5 space-y-4">
+        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+          <i data-lucide="target" class="w-4 h-4 text-orange-400"></i>
+          部位バランス（ドーナツグラフ）
+        </h3>
+        <div id="analytics-donut-container">
+          <!-- JSでSVGドーナツグラフを動的生成 -->
+        </div>
+      </div>
+
+      <!-- 部位別カード -->
+      <div class="space-y-3">
+        <h3 class="font-bold text-white text-sm flex items-center gap-2 px-1">
+          <i data-lucide="layout-grid" class="w-4 h-4 text-orange-400"></i>
+          部位ごとの記録
+        </h3>
+        <div id="analytics-part-cards" class="grid grid-cols-2 gap-3">
+          <!-- JSで部位別カードを動的生成 -->
+        </div>
+      </div>
+
+      <!-- 直近4週間の推移 -->
+      <div class="bg-slate-800/40 border border-slate-800 rounded-3xl p-5 space-y-4">
+        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+          <i data-lucide="bar-chart-2" class="w-4 h-4 text-orange-400"></i>
+          直近4週間の部位別推移（セット数）
+        </h3>
+        <div id="analytics-trend-container" class="space-y-4">
+          <!-- JSで週ごとの積み上げバーを動的生成 -->
+        </div>
+        <div id="analytics-trend-legend" class="flex flex-wrap gap-x-3 gap-y-1.5 pt-1">
+          <!-- JSで凡例を動的生成 -->
         </div>
       </div>
 
@@ -598,14 +652,32 @@
       }
     ];
 
+    // ローカルの日付を YYYY-MM-DD で返す（toISOString はUTC基準で、日本時間の朝は前日になってしまうため使わない）
+    function localDateStr(date = new Date()) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    // 保存データが壊れていてもアプリ全体が止まらないようにする
+    function safeParse(key, fallback) {
+      try {
+        const v = JSON.parse(localStorage.getItem(key));
+        return v ?? fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
     // --- 状態管理オブジェクト ---
     let state = {
       activeTab: 'dashboard',
-      customExercises: JSON.parse(localStorage.getItem('burnfit_custom_exercises')) || [],
-      routines: JSON.parse(localStorage.getItem('burnfit_routines')) || DEFAULT_ROUTINES,
-      history: JSON.parse(localStorage.getItem('burnfit_history')) || DEMO_HISTORY,
+      customExercises: safeParse('burnfit_custom_exercises', []),
+      routines: safeParse('burnfit_routines', DEFAULT_ROUTINES),
+      history: safeParse('burnfit_history', []),
       activeWorkout: null, 
-      selectedHistoryDate: new Date().toISOString().split('T')[0],
+      selectedHistoryDate: localDateStr(),
       exerciseFilterCategory: 'すべて',
       exerciseSearchQuery: '',
       
@@ -636,8 +708,110 @@
       localStorage.setItem('burnfit_history', JSON.stringify(state.history));
     }
 
+    // 未編集のデモ記録が保存済みデータに混ざっていたら取り除く（自分の記録は消さない）
+    function cleanDemoHistory() {
+      const before = state.history.length;
+      state.history = state.history.filter(entry =>
+        !DEMO_HISTORY.some(demo => JSON.stringify(demo) === JSON.stringify(entry))
+      );
+      if (state.history.length !== before) saveState();
+    }
+
+    // --- データのバックアップ（書き出し / 読み込み） ---
+    function exportBackup() {
+      const data = {
+        app: 'burnfit-clone',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        history: state.history,
+        routines: state.routines,
+        customExercises: state.customExercises
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `burnfit-backup-${localDateStr()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function importBackup(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (!data || !Array.isArray(data.history) || !Array.isArray(data.routines) || !Array.isArray(data.customExercises)) {
+            alert("このファイルはバックアップとして読み込めませんでした。");
+            return;
+          }
+          if (!confirm(`バックアップを読み込みますか？\n履歴 ${data.history.length}件 / ルーティン ${data.routines.length}件 / 自作種目 ${data.customExercises.length}件\n今のデータは上書きされます。`)) return;
+          state.history = data.history;
+          state.routines = data.routines;
+          state.customExercises = data.customExercises;
+          saveState();
+          renderDashboard();
+          renderRoutines();
+          renderHistory();
+          renderAnalytics();
+          lucide.createIcons();
+          alert("バックアップを読み込みました。");
+        } catch (e) {
+          alert("ファイルの読み込みに失敗しました。書き出したJSONファイルを選んでください。");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // --- 記録中ワークアウトの自動保存 / 復元 ---
+    function saveActiveWorkout() {
+      if (state.activeWorkout) {
+        localStorage.setItem('burnfit_active_workout', JSON.stringify(state.activeWorkout));
+      } else {
+        localStorage.removeItem('burnfit_active_workout');
+      }
+    }
+
+    function restoreActiveWorkout() {
+      const saved = safeParse('burnfit_active_workout', null);
+      if (!saved || !Array.isArray(saved.exercises) || !saved.startTime) return;
+      state.activeWorkout = saved;
+      if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
+      workoutIntervalTimer = setInterval(updateWorkoutTimerDisplay, 1000);
+      document.getElementById('active-workout-name').value = saved.name || '自由ワークアウト';
+      document.getElementById('floating-timer-btn').classList.remove('hidden');
+      document.getElementById('nav-workout-dot').classList.remove('hidden');
+      updateWorkoutTimerDisplay();
+    }
+
+    // レストタイマー終了時の通知音（iPhoneのSafariはバイブが動かないため）
+    function playTimerDoneSound() {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        [0, 0.25, 0.5].forEach(delay => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.value = 880;
+          gain.gain.value = 0.15;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + delay);
+          osc.stop(ctx.currentTime + delay + 0.18);
+        });
+      } catch (e) { /* 音が出なくてもタイマー自体は止めない */ }
+    }
+
     // --- 初期化処理 ---
     window.addEventListener('DOMContentLoaded', () => {
+      cleanDemoHistory();
+      restoreActiveWorkout();
       // カレンダー表示年月を選択日に合わせる
       const initialDateObj = new Date(state.selectedHistoryDate);
       state.currentCalYear = initialDateObj.getFullYear();
@@ -692,6 +866,7 @@
 
     // --- 時間フォーマッタ ---
     function formatTime(totalSeconds) {
+      totalSeconds = totalSeconds || 0;
       const hrs = Math.floor(totalSeconds / 3600);
       const mins = Math.floor((totalSeconds % 3600) / 60);
       const secs = totalSeconds % 60;
@@ -707,13 +882,12 @@
     // =========================================================================
     function renderDashboard() {
       // 1. 今週の記録数の計算 (過去7日間)
-      const now = new Date();
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(now.getDate() - 7);
-      
+      const todayMidnight = new Date();
+      todayMidnight.setHours(0, 0, 0, 0);
       const weeklyWorkouts = state.history.filter(h => {
-        const d = new Date(h.date);
-        return d >= oneWeekAgo && d <= now;
+        const d = new Date(h.date + 'T00:00:00');
+        const daysAgo = Math.floor((todayMidnight - d) / 86400000);
+        return daysAgo >= 0 && daysAgo < 7;
       });
       document.getElementById('stat-weekly-count').innerText = `${weeklyWorkouts.length}回`;
 
@@ -742,9 +916,9 @@
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() - 6 + i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = localDateStr(d);
         const hasWorkout = state.history.some(h => h.date === dateStr);
-        const isToday = new Date().toISOString().split('T')[0] === dateStr;
+        const isToday = localDateStr() === dateStr;
 
         const dayCol = document.createElement('div');
         dayCol.className = `p-2 rounded-xl flex flex-col items-center justify-between ${
@@ -792,7 +966,7 @@
                 <span class="text-xs text-slate-400">${item.date} • ${formatTime(item.duration)}</span>
               </div>
               <span class="text-xs font-extrabold bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/20">
-                ${item.totalVolume}kg
+                ${item.totalVolume || 0}kg
               </span>
             </div>
             <div class="flex flex-wrap gap-1.5">
@@ -812,6 +986,11 @@
     // ワークアウト進行・タイマー制御
     // =========================================================================
     function startWorkout(title, defaultExerciseIds = []) {
+      // 記録中のワークアウトがあるのに開始すると、記録中データが消えてしまうため確認する
+      if (state.activeWorkout) {
+        if (!confirm("記録中のワークアウトがあります。破棄して新しく始めますか？")) return;
+        if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
+      }
       // 進行中ワークアウトを作成
       const workoutExercises = defaultExerciseIds.map(id => {
         const base = getAllExercises().find(ex => ex.id === id);
@@ -839,6 +1018,7 @@
       if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
       workoutIntervalTimer = setInterval(updateWorkoutTimerDisplay, 1000);
 
+      saveActiveWorkout();
       // UIに反映
       document.getElementById('active-workout-name').value = title;
       document.getElementById('floating-timer-btn').classList.remove('hidden');
@@ -963,6 +1143,7 @@
     function updateSetData(exIdx, setIdx, field, val) {
       if (!state.activeWorkout) return;
       state.activeWorkout.exercises[exIdx].sets[setIdx][field] = parseFloat(val) || 0;
+      saveActiveWorkout();
     }
 
     // セット完了ボタンの切替
@@ -971,6 +1152,7 @@
       const set = state.activeWorkout.exercises[exIdx].sets[setIdx];
       set.done = !set.done;
 
+      saveActiveWorkout();
       // チェックを入れたときに自動レストタイマー起動
       if (set.done) {
         startRestTimer();
@@ -991,6 +1173,7 @@
         duration: lastSet.duration,
         done: false
       });
+      saveActiveWorkout();
       renderWorkoutScreen();
     }
 
@@ -1000,6 +1183,7 @@
       const sets = state.activeWorkout.exercises[exIdx].sets;
       if (sets.length > 1) {
         sets.pop();
+        saveActiveWorkout();
         renderWorkoutScreen();
       }
     }
@@ -1008,6 +1192,7 @@
     function removeExerciseFromWorkout(exIdx) {
       if (!state.activeWorkout) return;
       state.activeWorkout.exercises.splice(exIdx, 1);
+      saveActiveWorkout();
       renderWorkoutScreen();
     }
 
@@ -1042,7 +1227,7 @@
       let totalVolume = 0;
       savedExercises.forEach(ex => {
         ex.sets.forEach(s => {
-          totalVolume += (s.weight * (s.reps || 1));
+          totalVolume += (s.weight * (s.reps || 0));
         });
       });
 
@@ -1050,7 +1235,7 @@
 
       const newHistoryEntry = {
         id: 'hist-' + Date.now(),
-        date: new Date().toISOString().split('T')[0],
+        date: localDateStr(),
         duration: elapsed,
         totalVolume: totalVolume,
         exercises: savedExercises
@@ -1061,6 +1246,7 @@
 
       // 初期化
       state.activeWorkout = null;
+      saveActiveWorkout();
       if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
       document.getElementById('floating-timer-btn').classList.add('hidden');
       document.getElementById('nav-workout-dot').classList.add('hidden');
@@ -1073,6 +1259,7 @@
     function discardWorkout() {
       if (confirm("現在の記録を破棄して終了しますか？")) {
         state.activeWorkout = null;
+        saveActiveWorkout();
         if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
         document.getElementById('floating-timer-btn').classList.add('hidden');
         document.getElementById('nav-workout-dot').classList.add('hidden');
@@ -1098,16 +1285,34 @@
           updateRestTimerBtnText();
           // バイブレーション（サポートデバイスのみ）
           if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+          playTimerDoneSound();
         }
       }, 1000);
     }
 
-    // タイマーのON/OFF
+    // タイマーのON/OFF（一時停止した場合は残り時間から再開する）
     function toggleRestTimer() {
       if (isRestTimerRunning) {
         clearInterval(restTimerInterval);
         isRestTimerRunning = false;
-        document.getElementById('rest-timer-btn').innerText = "再開";
+        updateRestTimerBtnText();
+      } else if (restTimerValue > 0) {
+        // 残り時間がある場合はリセットせず、そのまま再開
+        isRestTimerRunning = true;
+        updateRestTimerBtnText();
+        if (restTimerInterval) clearInterval(restTimerInterval);
+        restTimerInterval = setInterval(() => {
+          if (restTimerValue > 0) {
+            restTimerValue--;
+            updateRestTimerBtnText();
+          } else {
+            clearInterval(restTimerInterval);
+            isRestTimerRunning = false;
+            updateRestTimerBtnText();
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+          playTimerDoneSound();
+          }
+        }, 1000);
       } else {
         startRestTimer();
       }
@@ -1221,6 +1426,7 @@
       };
 
       state.activeWorkout.exercises.push(newEx);
+      saveActiveWorkout();
       closeExerciseModal();
       renderWorkoutScreen();
     }
@@ -1418,7 +1624,7 @@
       }
 
       // 当月の日付セルを生成
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = localDateStr();
 
       for (let day = 1; day <= totalDays; day++) {
         const currentDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -1514,7 +1720,7 @@
               <h3 class="font-extrabold text-white text-lg">${log.exercises.length}種目のワークアウト</h3>
               <p class="text-xs text-slate-400 flex items-center gap-1 mt-1">
                 <i data-lucide="clock" class="w-3.5 h-3.5"></i>
-                時間: ${formatTime(log.duration)} • 総ボリューム: ${log.totalVolume}kg
+                時間: ${formatTime(log.duration)} • 総ボリューム: ${log.totalVolume || 0}kg
               </p>
             </div>
             <div class="flex gap-1.5 shrink-0">
@@ -1538,7 +1744,7 @@
                 <div class="flex flex-wrap gap-2 pl-2">
                   ${ex.sets.map((set, sIdx) => `
                     <span class="text-xs bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-400">
-                      ${sIdx + 1}S: <strong class="text-slate-200">${set.weight}kg</strong> × <strong class="text-slate-200">${set.reps || set.duration}</strong>
+                      ${sIdx + 1}S: <strong class="text-slate-200">${set.weight}kg</strong> × <strong class="text-slate-200">${set.reps || set.duration || 0}</strong>
                     </span>
                   `).join('')}
                 </div>
@@ -1714,7 +1920,7 @@
       let newTotalVolume = 0;
       state.editingHistoryData.exercises.forEach(ex => {
         ex.sets.forEach(set => {
-          newTotalVolume += (set.weight * (set.reps || 1));
+          newTotalVolume += (set.weight * (set.reps || 0));
         });
       });
       state.editingHistoryData.totalVolume = newTotalVolume;
@@ -1810,63 +2016,215 @@
     // =========================================================================
     // アナリティクス・統計分析
     // =========================================================================
+    // 部位ごとの固定カラー（グラフ・カード・凡例で共通）
+    const CATEGORY_COLORS = {
+      '胸': '#f97316',
+      '背中': '#38bdf8',
+      '脚': '#34d399',
+      '肩': '#facc15',
+      '腕': '#c084fc',
+      '腹筋': '#fb7185'
+    };
+    const CATEGORY_ORDER = ['胸', '背中', '脚', '肩', '腕', '腹筋'];
+    function categoryColor(name) {
+      return CATEGORY_COLORS[name] || '#94a3b8';
+    }
+
     function renderAnalytics() {
       const totalCountSpan = document.getElementById('analytics-total-count');
       const totalSetsSpan = document.getElementById('analytics-total-sets');
       const chartContainer = document.getElementById('analytics-chart-container');
+      const donutContainer = document.getElementById('analytics-donut-container');
+      const partCards = document.getElementById('analytics-part-cards');
+      const trendContainer = document.getElementById('analytics-trend-container');
+      const trendLegend = document.getElementById('analytics-trend-legend');
       const adviceText = document.getElementById('analytics-advice-text');
 
       totalCountSpan.innerText = `${state.history.length}回`;
 
+      // 部位ごとの集計（既存の記録データは読み取るだけで、保存形式は変更しない）
       let totalSets = 0;
-      const categoryCounts = {};
+      const stats = {}; // name -> { sets, volume, sessions, lastDate }
+      const ensureStat = (name) => {
+        if (!stats[name]) stats[name] = { sets: 0, volume: 0, sessions: 0, lastDate: null };
+        return stats[name];
+      };
+      CATEGORY_ORDER.forEach(cat => ensureStat(cat));
 
       state.history.forEach(log => {
+        const catsInLog = new Set();
         log.exercises.forEach(ex => {
+          const cat = ex.category || 'その他';
+          const st = ensureStat(cat);
           const setsCount = ex.sets.length;
           totalSets += setsCount;
-          categoryCounts[ex.category] = (categoryCounts[ex.category] || 0) + setsCount;
+          st.sets += setsCount;
+          ex.sets.forEach(set => {
+            st.volume += (set.weight || 0) * (set.reps || 0);
+          });
+          catsInLog.add(cat);
+        });
+        catsInLog.forEach(cat => {
+          const st = ensureStat(cat);
+          st.sessions += 1;
+          if (!st.lastDate || log.date > st.lastDate) st.lastDate = log.date;
         });
       });
 
       totalSetsSpan.innerText = `${totalSets}セット`;
       chartContainer.innerHTML = '';
+      if (donutContainer) donutContainer.innerHTML = '';
+      if (partCards) partCards.innerHTML = '';
+      if (trendContainer) trendContainer.innerHTML = '';
+      if (trendLegend) trendLegend.innerHTML = '';
 
       if (totalSets === 0) {
         chartContainer.innerHTML = `
           <p class="text-xs text-slate-400 text-center py-6">分析するための記録がまだ十分にありません。</p>
         `;
+        if (donutContainer) donutContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">記録がたまると、ここに部位バランスが出ます。</p>`;
+        if (trendContainer) trendContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">記録がたまると、ここに週ごとの推移が出ます。</p>`;
         adviceText.innerText = "まずは今日のワークアウトを完了して、記録を蓄積しましょう！";
         return;
       }
 
       // カテゴリ割合の算出
-      const sortedCategories = Object.keys(categoryCounts).map(cat => ({
+      const sortedCategories = Object.keys(stats).filter(cat => stats[cat].sets > 0).map(cat => ({
         name: cat,
-        count: categoryCounts[cat],
-        percentage: Math.round((categoryCounts[cat] / totalSets) * 100)
+        count: stats[cat].sets,
+        percentage: Math.round((stats[cat].sets / totalSets) * 100)
       })).sort((a, b) => b.count - a.count);
 
-      // 進捗バーの描写
+      // 進捗バーの描写（部位ごとに色分け）
       sortedCategories.forEach(item => {
         const row = document.createElement('div');
         row.className = "space-y-1";
         row.innerHTML = `
           <div class="flex justify-between text-xs font-semibold">
-            <span class="text-slate-300">${item.name}</span>
-            <span class="text-orange-400">${item.percentage}% (${item.count}セット)</span>
+            <span class="text-slate-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(item.name)}"></span>${item.name}</span>
+            <span style="color:${categoryColor(item.name)}">${item.percentage}% (${item.count}セット)</span>
           </div>
           <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
-            <div class="bg-gradient-to-r from-orange-500 to-amber-400 h-full rounded-full" style="width: ${item.percentage}%"></div>
+            <div class="h-full rounded-full" style="width: ${item.percentage}%; background:${categoryColor(item.name)}"></div>
           </div>
         `;
         chartContainer.appendChild(row);
       });
 
+      // ドーナツグラフ（SVG）の描写
+      if (donutContainer) {
+        const R = 54;
+        const CIRC = 2 * Math.PI * R;
+        let offset = 0;
+        const segments = sortedCategories.map(item => {
+          const frac = item.count / totalSets;
+          const dash = frac * CIRC;
+          const seg = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${categoryColor(item.name)}" stroke-width="20" stroke-dasharray="${dash} ${CIRC - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"></circle>`;
+          offset += dash;
+          return seg;
+        }).join('');
+        const legend = sortedCategories.map(item => `
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(item.name)}"></span>${item.name}</span>
+            <span class="font-bold text-slate-200">${item.percentage}%</span>
+          </div>
+        `).join('');
+        donutContainer.innerHTML = `
+          <div class="flex items-center gap-4">
+            <svg width="140" height="140" viewBox="0 0 140 140" class="shrink-0">
+              ${segments}
+              <text x="70" y="66" text-anchor="middle" fill="#f1f5f9" font-size="20" font-weight="900">${totalSets}</text>
+              <text x="70" y="86" text-anchor="middle" fill="#94a3b8" font-size="10">総セット</text>
+            </svg>
+            <div class="flex-1 space-y-2">${legend}</div>
+          </div>
+        `;
+      }
+
+      // 部位別カードの描写（0セットの部位も含めて全部位を表示）
+      if (partCards) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const orderedNames = [...CATEGORY_ORDER, ...Object.keys(stats).filter(c => !CATEGORY_ORDER.includes(c))];
+        orderedNames.forEach(cat => {
+          const st = stats[cat];
+          const pct = Math.round((st.sets / totalSets) * 100);
+          let lastLabel = 'まだ記録なし';
+          if (st.lastDate) {
+            const d = new Date(st.lastDate + 'T00:00:00');
+            const days = Math.floor((today - d) / 86400000);
+            lastLabel = days <= 0 ? '今日実施' : days === 1 ? '昨日実施' : `${days}日前`;
+          }
+          const card = document.createElement('div');
+          card.className = "bg-slate-800/40 border border-slate-800 rounded-2xl p-3.5 space-y-1.5";
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-sm text-white flex items-center gap-1.5"><span class="w-3 h-3 rounded-full inline-block" style="background:${categoryColor(cat)}"></span>${cat}</span>
+              <span class="text-xs font-black" style="color:${categoryColor(cat)}">${pct}%</span>
+            </div>
+            <div class="text-xs text-slate-300">${st.sets}セット ・ ${(st.volume / 1000).toFixed(1)}t</div>
+            <div class="text-[11px] text-slate-400">${st.sessions}回実施 ・ ${lastLabel}</div>
+            <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
+              <div class="h-full rounded-full" style="width: ${pct}%; background:${categoryColor(cat)}"></div>
+            </div>
+          `;
+          partCards.appendChild(card);
+        });
+      }
+
+      // 直近4週間の推移（週ごとの部位別セット数を積み上げバーで表示）
+      if (trendContainer) {
+        const weekLabels = ['今週', '先週', '2週前', '3週前'];
+        const buckets = weekLabels.map(() => ({ total: 0, perCat: {} }));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        state.history.forEach(log => {
+          const d = new Date(log.date + 'T00:00:00');
+          const daysAgo = Math.floor((today - d) / 86400000);
+          if (daysAgo < 0 || daysAgo >= 28) return;
+          const idx = Math.floor(daysAgo / 7);
+          log.exercises.forEach(ex => {
+            const cat = ex.category || 'その他';
+            buckets[idx].total += ex.sets.length;
+            buckets[idx].perCat[cat] = (buckets[idx].perCat[cat] || 0) + ex.sets.length;
+          });
+        });
+        const maxTotal = Math.max(...buckets.map(b => b.total), 1);
+        // 表示は古い週から新しい週へ（3週前 → 今週）
+        [...buckets.keys()].reverse().forEach(idx => {
+          const b = buckets[idx];
+          const segs = Object.keys(b.perCat).sort((a, c) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(c)).map(cat => {
+            const w = (b.perCat[cat] / maxTotal) * 100;
+            return `<div class="h-full" title="${cat}: ${b.perCat[cat]}セット" style="width:${w}%; background:${categoryColor(cat)}"></div>`;
+          }).join('');
+          const row = document.createElement('div');
+          row.className = "space-y-1";
+          row.innerHTML = `
+            <div class="flex justify-between text-xs font-semibold">
+              <span class="text-slate-300">${weekLabels[idx]}</span>
+              <span class="text-slate-400">${b.total}セット</span>
+            </div>
+            <div class="w-full bg-slate-950 rounded-full h-3.5 overflow-hidden flex">${segs || ''}</div>
+          `;
+          trendContainer.appendChild(row);
+        });
+        if (trendLegend) {
+          trendLegend.innerHTML = CATEGORY_ORDER.map(cat => `
+            <span class="text-[11px] text-slate-300 flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(cat)}"></span>${cat}</span>
+          `).join('');
+        }
+      }
+
       // AIアドバイスの自動変更
       if (sortedCategories.length > 0) {
         const topCat = sortedCategories[0].name;
-        adviceText.innerText = `最近は特に「${topCat}」を重点的に鍛えることができています！ 全身のプロポーションと筋力バランスを最高に高めるために、今後は他の部位にも均等に刺激を与えるセッションを作ってみるのもおすすめです。`;
+        const zeroCats = CATEGORY_ORDER.filter(cat => stats[cat].sets === 0);
+        if (zeroCats.length > 0) {
+          adviceText.innerText = `最近は特に「${topCat}」を重点的に鍛えることができています！ 一方で「${zeroCats.join('・')}」はまだ記録がありません。全身のバランスのために、次はその部位も入れてみるのがおすすめです。`;
+        } else {
+          const leastCat = sortedCategories[sortedCategories.length - 1].name;
+          adviceText.innerText = `最近は特に「${topCat}」を重点的に鍛えることができています！ 全身のバランスを高めるために、一番少ない「${leastCat}」を少し多めに入れてみるのもおすすめです。`;
+        }
       }
     }
   </script>
