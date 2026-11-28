@@ -4,33 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BurnFit クローン - 筋トレ記録アプリ</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Tailwind カスタム設定 -->
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          animation: {
-            fadeIn: 'fadeIn 0.2s ease-out forwards',
-            scaleUp: 'scaleUp 0.2s ease-out forwards',
-          },
-          keyframes: {
-            fadeIn: {
-              '0%': { opacity: '0', transform: 'translateY(4px)' },
-              '100%': { opacity: '1', transform: 'translateY(0)' },
-            },
-            scaleUp: {
-              '0%': { transform: 'scale(0.95)', opacity: '0' },
-              '100%': { transform: 'scale(1)', opacity: '1' },
-            }
-          }
-        }
-      }
-    }
-  </script>
+  <meta name="theme-color" content="#f97316">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BurnFit">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <!-- Tailwind CSS（静的生成済み：オフラインでも崩れない） -->
+  <link rel="stylesheet" href="./tailwind.css">
   <!-- Lucide Icons CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <style>
     /* スクロールバーの非表示（モバイル対応） */
     .no-scrollbar::-webkit-scrollbar {
@@ -40,6 +24,11 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
+    /* iPhoneで入力時に自動ズームしないように（16px未満でズームする仕様のため） */
+    input[type="number"], input[type="text"], input[type="search"] {
+      font-size: 16px;
+    }
+
   </style>
 </head>
 <body class="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-orange-500 selection:text-white pb-24">
@@ -139,6 +128,7 @@
           データのバックアップ
         </h3>
         <p class="text-xs text-slate-400 leading-relaxed">記録はこのブラウザの中にだけ保存されています。ときどき書き出しておくと、機種変更やデータ削除のときも復元できます。</p>
+        <p id="backup-reminder" class="hidden text-xs font-bold text-amber-400"></p>
         <div class="flex gap-3">
           <button onclick="exportBackup()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-sm py-3 px-4 rounded-xl transition">
             書き出す
@@ -149,6 +139,7 @@
           <input type="file" id="backup-import-file" accept=".json,application/json" class="hidden" onchange="importBackup(event)" />
         </div>
       </div>
+
     </div>
 
 
@@ -182,6 +173,7 @@
                 <i data-lucide="clock" class="w-3.5 h-3.5 text-orange-400"></i>
                 経過時間: <span id="active-workout-duration">00:00</span>
               </p>
+              <button id="workout-pause-btn" onclick="toggleWorkoutPause()" class="mt-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-3 py-1.5 rounded-lg font-bold text-slate-200">一時停止</button>
             </div>
             <button onclick="finishWorkout()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-1.5">
               <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
@@ -196,7 +188,7 @@
               <span class="text-xs font-semibold text-slate-300">インターバル設定</span>
             </div>
             <div class="flex items-center gap-2">
-              <select id="rest-time-select" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2 py-1 text-slate-200">
+              <select id="rest-time-select" onchange="onRestTimeSelectChange()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2 py-1 text-slate-200">
                 <option value="30">30秒</option>
                 <option value="45">45秒</option>
                 <option value="60" selected>60秒</option>
@@ -206,8 +198,21 @@
               <button id="rest-timer-btn" onclick="toggleRestTimer()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 py-1 rounded-lg font-bold">
                 スタート
               </button>
+              <button id="rest-add-btn" onclick="addRestTime(10)" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-2 py-1 rounded-lg font-bold">+10秒</button>
             </div>
           </div>
+        </div>
+
+                <!-- 通知・画面スリープ防止バー -->
+        <div class="bg-slate-900/50 rounded-2xl p-3 border border-slate-700/40 space-y-2">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <button id="notify-permission-btn" onclick="requestNotifyPermission()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 py-1.5 rounded-lg font-bold">🔔 通知を許可</button>
+            <label class="flex items-center gap-1.5 text-xs text-slate-300 font-semibold">
+              <input id="wakelock-toggle" type="checkbox" onchange="toggleWakeLockSetting()" class="accent-orange-500 w-4 h-4">
+              インターバル中は画面を消さない
+            </label>
+          </div>
+          <p id="rest-timer-status" class="text-[11px] text-slate-400 leading-relaxed">別のアプリを開いていても通知で知らせます。iPhoneは「ホーム画面に追加」したアプリから開いて通知を許可してください。</p>
         </div>
 
         <!-- 選択されたトレーニング種目リスト -->
@@ -534,7 +539,7 @@
 
       <!-- 編集用・種目追加ボタン -->
       <div class="px-1 py-2 border-t border-slate-800/60 shrink-0">
-        <button onclick="openHistoryAddExerciseModal()" class="w-full bg-slate-800 hover:bg-slate-750 text-orange-400 border border-dashed border-slate-750 rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+        <button onclick="openHistoryAddExerciseModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-orange-400 border border-dashed border-slate-700 rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition">
           <i data-lucide="plus" class="w-4 h-4"></i>
           種目を追加する
         </button>
@@ -670,12 +675,79 @@
       }
     }
 
+    // 数値を安全な範囲に収める（マイナスや異常値を防ぐ）
+    function clampNum(v, max) {
+      let n = parseFloat(v);
+      if (isNaN(n) || n < 0) n = 0;
+      return Math.min(n, max);
+    }
+    function clampSetValue(field, val) {
+      const max = field === 'weight' ? 999 : field === 'duration' ? 36000 : 999;
+      return clampNum(val, max);
+    }
+
+    // ユーザーが入力した名前をHTMLに埋め込むときのエスケープ
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // 読み込んだデータの形を整える（形が違うデータが混ざっても真っ白にしない）
+    function sanitizeHistoryList(list) {
+      if (!Array.isArray(list)) return [];
+      return list.filter(h => h && typeof h === 'object' && typeof h.date === 'string' && Array.isArray(h.exercises)).map(h => ({
+        id: typeof h.id === 'string' ? h.id : 'hist-' + Date.now() + '-' + Math.floor(Math.random() * 1e6),
+        date: h.date,
+        duration: Number(h.duration) || 0,
+        totalVolume: Number(h.totalVolume) || 0,
+        exercises: h.exercises.filter(ex => ex && typeof ex.name === 'string' && Array.isArray(ex.sets)).map(ex => ({
+          name: ex.name,
+          category: typeof ex.category === 'string' ? ex.category : 'その他',
+          type: typeof ex.type === 'string' ? ex.type : 'weight',
+          sets: ex.sets.map(s => ({ weight: clampNum(s && s.weight, 999), reps: clampNum(s && s.reps, 999), duration: clampNum(s && s.duration, 36000) }))
+        }))
+      }));
+    }
+    function sanitizeExercises(list) {
+      if (!Array.isArray(list)) return [];
+      return list.filter(ex => ex && typeof ex.id === 'string' && typeof ex.name === 'string').map(ex => ({
+        id: ex.id, name: ex.name,
+        category: typeof ex.category === 'string' ? ex.category : 'その他',
+        type: typeof ex.type === 'string' ? ex.type : 'weight'
+      }));
+    }
+    function sanitizeRoutines(list, fallback) {
+      if (!Array.isArray(list)) return fallback;
+      return list.filter(r => r && typeof r.id === 'string' && typeof r.name === 'string' && Array.isArray(r.exercises)).map(r => ({
+        id: r.id, name: r.name,
+        description: typeof r.description === 'string' ? r.description : '',
+        exercises: r.exercises.filter(id => typeof id === 'string')
+      }));
+    }
+
+    // セットの表示用まとめ（種目タイプで単位を変える）
+    function formatSetSummary(ex, set) {
+      if (ex.type === 'duration') return `${set.duration || 0}秒`;
+      if (ex.type === 'reps') return `${set.reps || 0}回`;
+      return `${set.weight || 0}kg × ${set.reps || 0}`;
+    }
+
+    // 前回の同じ種目のセット内容（新しいセッションの初期値に使う）
+    function getLastSetsForExercise(name) {
+      for (const log of state.history) {
+        const ex = (log.exercises || []).find(e => e.name === name);
+        if (ex && Array.isArray(ex.sets) && ex.sets.length) {
+          return ex.sets.slice(0, 6).map(s => ({ weight: s.weight || 0, reps: s.reps || 0, duration: s.duration || 0, done: false }));
+        }
+      }
+      return null;
+    }
+
     // --- 状態管理オブジェクト ---
     let state = {
       activeTab: 'dashboard',
-      customExercises: safeParse('burnfit_custom_exercises', []),
-      routines: safeParse('burnfit_routines', DEFAULT_ROUTINES),
-      history: safeParse('burnfit_history', []),
+      customExercises: sanitizeExercises(safeParse('burnfit_custom_exercises', [])),
+      routines: sanitizeRoutines(safeParse('burnfit_routines', DEFAULT_ROUTINES), DEFAULT_ROUTINES),
+      history: sanitizeHistoryList(safeParse('burnfit_history', [])),
       activeWorkout: null, 
       selectedHistoryDate: localDateStr(),
       exerciseFilterCategory: 'すべて',
@@ -719,6 +791,7 @@
 
     // --- データのバックアップ（書き出し / 読み込み） ---
     function exportBackup() {
+      try { localStorage.setItem('burnfit_last_backup', localDateStr()); } catch (e) {}
       const data = {
         app: 'burnfit-clone',
         version: 1,
@@ -751,9 +824,9 @@
             return;
           }
           if (!confirm(`バックアップを読み込みますか？\n履歴 ${data.history.length}件 / ルーティン ${data.routines.length}件 / 自作種目 ${data.customExercises.length}件\n今のデータは上書きされます。`)) return;
-          state.history = data.history;
-          state.routines = data.routines;
-          state.customExercises = data.customExercises;
+          state.history = sanitizeHistoryList(data.history);
+          state.routines = sanitizeRoutines(data.routines, []);
+          state.customExercises = sanitizeExercises(data.customExercises);
           saveState();
           renderDashboard();
           renderRoutines();
@@ -779,8 +852,19 @@
 
     function restoreActiveWorkout() {
       const saved = safeParse('burnfit_active_workout', null);
-      if (!saved || !Array.isArray(saved.exercises) || !saved.startTime) return;
+      if (!saved || !Array.isArray(saved.exercises) || (!saved.startTime && !saved.segmentStart)) return;
+      // 閉じている間の時間は数えない：最後に確認できた時刻までを加算して、停止状態で復元する
+      if (typeof saved.elapsedBase !== 'number') saved.elapsedBase = 0;
+      if (!saved.paused) {
+        const seg = saved.segmentStart || saved.startTime;
+        const last = saved.lastTickAt || seg;
+        saved.elapsedBase += Math.max(0, Math.floor((last - seg) / 1000));
+      }
+      saved.paused = true;
+      saved.segmentStart = null;
+      if (!saved.dateStr) saved.dateStr = localDateStr(new Date(saved.startTime || Date.now()));
       state.activeWorkout = saved;
+      saveActiveWorkout();
       if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
       workoutIntervalTimer = setInterval(updateWorkoutTimerDisplay, 1000);
       document.getElementById('active-workout-name').value = saved.name || '自由ワークアウト';
@@ -789,13 +873,22 @@
       updateWorkoutTimerDisplay();
     }
 
-    // レストタイマー終了時の通知音（iPhoneのSafariはバイブが動かないため）
-    function playTimerDoneSound() {
+    // レストタイマー終了時の通知音（共有AudioContextを使い、ユーザー操作時に解放しておく）
+    let sharedAudioCtx = null;
+    function ensureAudioUnlocked() {
       try {
         const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        const ctx = new Ctx();
-        [0, 0.25, 0.5].forEach(delay => {
+        if (!Ctx) return null;
+        if (!sharedAudioCtx) sharedAudioCtx = new Ctx();
+        if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+        return sharedAudioCtx;
+      } catch (e) { return null; }
+    }
+    function playTimerDoneSound() {
+      const ctx = ensureAudioUnlocked();
+      if (!ctx) return;
+      try {
+        [0, 0.25, 0.5, 0.95, 1.2, 1.45].forEach(delay => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.frequency.value = 880;
@@ -805,13 +898,50 @@
           osc.start(ctx.currentTime + delay);
           osc.stop(ctx.currentTime + delay + 0.18);
         });
-      } catch (e) { /* 音が出なくてもタイマー自体は止めない */ }
+      } catch (e) { /* 音が出なくても通知は出す */ }
+    }
+
+    // --- バックグラウンド通知 ---
+    function updateNotifyBtn() {
+      const btn = document.getElementById('notify-permission-btn');
+      if (!btn) return;
+      if (!('Notification' in window)) { btn.innerText = '🔔 このブラウザは通知非対応'; return; }
+      if (Notification.permission === 'granted') btn.innerText = '🔔 通知ON（タップでテスト）';
+      else if (Notification.permission === 'denied') btn.innerText = '🔔 通知がブロック中（端末設定で許可を）';
+      else btn.innerText = '🔔 通知を許可';
+    }
+    async function requestNotifyPermission() {
+      if (!('Notification' in window)) {
+        alert('このブラウザは通知に対応していません。iPhoneの場合は、Safariの共有ボタンから「ホーム画面に追加」して、そのアイコンから開いてください。');
+        return;
+      }
+      let perm = Notification.permission;
+      if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (e) {} }
+      updateNotifyBtn();
+      if (perm === 'granted') showRestDoneNotification(true);
+      else if (perm === 'denied') alert('通知がブロックされています。端末の「設定」→このアプリ／ブラウザ→「通知を許可」をONにしてください。');
+    }
+    async function showRestDoneNotification(isTest = false) {
+      const title = 'インターバル終了';
+      const body = isTest ? '通知テスト：終了時はこのように知らせます' : '次のセットを始めよう！';
+      try {
+        if ('serviceWorker' in navigator && 'Notification' in window && Notification.permission === 'granted') {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) { await reg.showNotification(title, { body, tag: 'burnfit-rest-timer', renotify: true, vibrate: [200, 100, 200, 100, 300], data: { url: './index.html' } }); return; }
+        }
+      } catch (e) {}
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body, tag: 'burnfit-rest-timer' });
+      } catch (e) {}
     }
 
     // --- 初期化処理 ---
     window.addEventListener('DOMContentLoaded', () => {
       cleanDemoHistory();
       restoreActiveWorkout();
+      restoreRestTimer();
+      initRestTimerUI();
+      if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js').catch(() => {}); }
       // カレンダー表示年月を選択日に合わせる
       const initialDateObj = new Date(state.selectedHistoryDate);
       state.currentCalYear = initialDateObj.getFullYear();
@@ -940,6 +1070,22 @@
         calendarGrid.appendChild(dayCol);
       }
 
+      // バックアップ提醒（記録があるのに未実施 or 30日以上前なら出す）
+      const reminderEl = document.getElementById('backup-reminder');
+      if (reminderEl) {
+        const lastBackup = (() => { try { return localStorage.getItem('burnfit_last_backup'); } catch (e) { return null; } })();
+        let showReminder = false;
+        if (state.history.length > 0) {
+          if (!lastBackup) showReminder = true;
+          else {
+            const days = Math.floor((new Date(localDateStr() + 'T00:00:00') - new Date(lastBackup + 'T00:00:00')) / 86400000);
+            if (days >= 30) showReminder = true;
+          }
+        }
+        reminderEl.classList.toggle('hidden', !showReminder);
+        if (showReminder) reminderEl.innerText = lastBackup ? '⚠️ 最後のバックアップから30日以上たっています。下の「書き出す」で保存しておきましょう。' : '⚠️ まだバックアップがありません。下の「書き出す」で保存しておきましょう。';
+      }
+
       // 5. 最近のセッション表示 (最新の2件)
       const recentList = document.getElementById('recent-sessions-list');
       recentList.innerHTML = '';
@@ -962,7 +1108,7 @@
           card.innerHTML = `
             <div class="flex justify-between items-start mb-3">
               <div>
-                <h4 class="font-bold text-white text-sm line-clamp-1">${exNames}${extraCount}</h4>
+                <h4 class="font-bold text-white text-sm line-clamp-1">${escapeHtml(exNames)}${extraCount}</h4>
                 <span class="text-xs text-slate-400">${item.date} • ${formatTime(item.duration)}</span>
               </div>
               <span class="text-xs font-extrabold bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/20">
@@ -972,7 +1118,7 @@
             <div class="flex flex-wrap gap-1.5">
               ${item.exercises.map(ex => `
                 <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700/50">
-                  ${ex.name} (${ex.sets.length}S)
+                  ${escapeHtml(ex.name)} (${ex.sets.length}S)
                 </span>
               `).join('')}
             </div>
@@ -1000,8 +1146,8 @@
           name: base.name,
           category: base.category,
           type: base.type,
-          sets: [
-            base.type === 'duration' 
+          sets: getLastSetsForExercise(base.name) || [
+            base.type === 'duration'
               ? { weight: 0, duration: 60, done: false }
               : { weight: 0, reps: 10, done: false }
           ]
@@ -1011,6 +1157,11 @@
       state.activeWorkout = {
         name: title,
         startTime: Date.now(),
+        segmentStart: Date.now(),
+        elapsedBase: 0,
+        paused: false,
+        lastTickAt: Date.now(),
+        dateStr: localDateStr(),
         exercises: workoutExercises
       };
 
@@ -1027,12 +1178,42 @@
       switchTab('workout');
     }
 
+    function workoutElapsedSeconds() {
+      if (!state.activeWorkout) return 0;
+      const w = state.activeWorkout;
+      const base = w.elapsedBase || 0;
+      if (w.paused) return base;
+      const seg = w.segmentStart || w.startTime || Date.now();
+      return base + Math.max(0, Math.floor((Date.now() - seg) / 1000));
+    }
+
+    function toggleWorkoutPause() {
+      const w = state.activeWorkout;
+      if (!w) return;
+      if (w.paused) {
+        w.paused = false;
+        w.segmentStart = Date.now();
+        w.lastTickAt = Date.now();
+      } else {
+        w.elapsedBase = workoutElapsedSeconds();
+        w.paused = true;
+        w.segmentStart = null;
+      }
+      saveActiveWorkout();
+      updateWorkoutTimerDisplay();
+    }
+
     function updateWorkoutTimerDisplay() {
       if (!state.activeWorkout) return;
-      const elapsed = Math.floor((Date.now() - state.activeWorkout.startTime) / 1000);
-      const timeStr = formatTime(elapsed);
-      document.getElementById('active-workout-duration').innerText = timeStr;
-      document.getElementById('floating-timer-text').innerText = `計測中: ${timeStr}`;
+      const w = state.activeWorkout;
+      const timeStr = formatTime(workoutElapsedSeconds());
+      const durEl = document.getElementById('active-workout-duration');
+      if (durEl) durEl.innerText = timeStr;
+      const floatEl = document.getElementById('floating-timer-text');
+      if (floatEl) floatEl.innerText = w.paused ? `一時停止中: ${timeStr}` : `計測中: ${timeStr}`;
+      const pauseBtn = document.getElementById('workout-pause-btn');
+      if (pauseBtn) pauseBtn.innerText = w.paused ? '再開する' : '一時停止';
+      if (!w.paused) { w.lastTickAt = Date.now(); saveActiveWorkout(); }
     }
 
     function renderWorkoutScreen() {
@@ -1059,6 +1240,9 @@
         let setsRowsHtml = '';
         ex.sets.forEach((set, setIdx) => {
           const inputPlaceholder = ex.type === 'duration' ? '秒' : '回数';
+          const weightCellHtml = ex.type === 'weight'
+            ? `<input type="number" inputmode="decimal" value="${set.weight || ''}" placeholder="kg" ${set.done ? 'disabled' : ''} oninput="updateSetData(${exIdx}, ${setIdx}, 'weight', this.value)" class="col-span-4 bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-center font-bold text-white focus:ring-1 focus:ring-orange-500 focus:outline-none" />`
+            : `<span class="col-span-4 text-xs font-bold text-slate-500">自重</span>`;
           const valueField = ex.type === 'duration' ? (set.duration || '') : (set.reps || '');
           const doneClass = set.done ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-700 hover:border-slate-500 text-slate-400';
           const doneRowBg = set.done ? 'bg-emerald-500/5 border border-emerald-500/10' : 'bg-transparent';
@@ -1067,28 +1251,21 @@
             <div class="grid grid-cols-12 gap-2 items-center text-center p-1 rounded-xl transition ${doneRowBg}">
               <span class="col-span-2 text-sm font-bold text-slate-400">${setIdx + 1}</span>
               
-              <input 
-                type="number" 
-                value="${set.weight || ''}" 
-                placeholder="kg"
-                ${set.done ? 'disabled' : ''}
-                oninput="updateSetData(${exIdx}, ${setIdx}, 'weight', this.value)"
-                class="col-span-4 bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-center text-sm font-bold text-white focus:ring-1 focus:ring-orange-500 focus:outline-none"
-              />
+              ${weightCellHtml}
 
               <input 
-                type="number" 
+                type="number" inputmode="numeric"
                 value="${valueField}" 
                 placeholder="${inputPlaceholder}"
                 ${set.done ? 'disabled' : ''}
                 oninput="updateSetData(${exIdx}, ${setIdx}, '${ex.type === 'duration' ? 'duration' : 'reps'}', this.value)"
-                class="col-span-4 bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-center text-sm font-bold text-white focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                class="col-span-4 bg-slate-900 border border-slate-700 rounded-lg py-2 px-2 text-center font-bold text-white focus:ring-1 focus:ring-orange-500 focus:outline-none"
               />
 
               <div class="col-span-2 flex justify-center">
                 <button 
                   onclick="toggleSetDone(${exIdx}, ${setIdx})"
-                  class="w-7 h-7 rounded-lg flex items-center justify-center transition border ${doneClass}"
+                  class="w-11 h-11 rounded-lg flex items-center justify-center transition border ${doneClass}"
                 >
                   <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
                 </button>
@@ -1101,11 +1278,11 @@
           <div class="flex justify-between items-center">
             <div class="flex items-center gap-2">
               <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                ${ex.category}
+                ${escapeHtml(ex.category)}
               </span>
-              <h4 class="font-bold text-white">${ex.name}</h4>
+              <h4 class="font-bold text-white">${escapeHtml(ex.name)}</h4>
             </div>
-            <button onclick="removeExerciseFromWorkout(${exIdx})" class="text-slate-500 hover:text-rose-400 p-1">
+            <button onclick="removeExerciseFromWorkout(${exIdx})" class="text-slate-500 hover:text-rose-400 p-2.5">
               <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
           </div>
@@ -1114,7 +1291,7 @@
           <div class="space-y-2">
             <div class="grid grid-cols-12 gap-2 text-center text-xs text-slate-400 font-bold px-1">
               <span class="col-span-2">セット</span>
-              <span class="col-span-4">重量</span>
+              <span class="col-span-4">${ex.type === 'weight' ? '重量' : '自重'}</span>
               <span class="col-span-4">${ex.type === 'duration' ? '持続時間' : 'レップ数'}</span>
               <span class="col-span-2">完了</span>
             </div>
@@ -1142,7 +1319,7 @@
     // セットデータの更新
     function updateSetData(exIdx, setIdx, field, val) {
       if (!state.activeWorkout) return;
-      state.activeWorkout.exercises[exIdx].sets[setIdx][field] = parseFloat(val) || 0;
+      state.activeWorkout.exercises[exIdx].sets[setIdx][field] = clampSetValue(field, val);
       saveActiveWorkout();
     }
 
@@ -1153,9 +1330,11 @@
       set.done = !set.done;
 
       saveActiveWorkout();
-      // チェックを入れたときに自動レストタイマー起動
+      // チェックを入れたときに自動レストタイマー起動／外したら止める
       if (set.done) {
         startRestTimer();
+      } else {
+        stopRestTimer();
       }
 
       renderWorkoutScreen();
@@ -1231,11 +1410,11 @@
         });
       });
 
-      const elapsed = Math.floor((Date.now() - state.activeWorkout.startTime) / 1000);
+      const elapsed = workoutElapsedSeconds();
 
       const newHistoryEntry = {
         id: 'hist-' + Date.now(),
-        date: localDateStr(),
+        date: state.activeWorkout.dateStr || localDateStr(new Date(state.activeWorkout.startTime || Date.now())),
         duration: elapsed,
         totalVolume: totalVolume,
         exercises: savedExercises
@@ -1250,6 +1429,7 @@
       if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
       document.getElementById('floating-timer-btn').classList.add('hidden');
       document.getElementById('nav-workout-dot').classList.add('hidden');
+      stopRestTimer();
 
       alert("トレーニングが記録されました！お疲れ様でした！👏");
       switchTab('dashboard');
@@ -1263,69 +1443,195 @@
         if (workoutIntervalTimer) clearInterval(workoutIntervalTimer);
         document.getElementById('floating-timer-btn').classList.add('hidden');
         document.getElementById('nav-workout-dot').classList.add('hidden');
+        stopRestTimer();
         switchTab('dashboard');
       }
     }
 
-    // --- レストタイマー機能 ---
+    // --- レストタイマー機能（終了時刻ベース：バックグラウンドでもズレない） ---
+    let restTimerEndAt = 0;
+    const REST_TIMER_KEY = 'burnfit_rest_timer';
+    const ORIGINAL_TITLE = document.title;
+    let wakeLockObj = null;
+
+    function persistRestTimer() {
+      try {
+        if (isRestTimerRunning && restTimerEndAt > 0) {
+          localStorage.setItem(REST_TIMER_KEY, JSON.stringify({ running: true, endAt: restTimerEndAt }));
+        } else if (restTimerValue > 0) {
+          localStorage.setItem(REST_TIMER_KEY, JSON.stringify({ running: false, remaining: restTimerValue }));
+        } else {
+          localStorage.removeItem(REST_TIMER_KEY);
+        }
+      } catch (e) {}
+    }
+
     function startRestTimer() {
       const restSec = parseInt(document.getElementById('rest-time-select').value);
+      ensureAudioUnlocked();
       restTimerValue = restSec;
+      restTimerEndAt = Date.now() + restSec * 1000;
       isRestTimerRunning = true;
-      updateRestTimerBtnText();
-
+      persistRestTimer();
       if (restTimerInterval) clearInterval(restTimerInterval);
-      restTimerInterval = setInterval(() => {
-        if (restTimerValue > 0) {
-          restTimerValue--;
-          updateRestTimerBtnText();
-        } else {
-          clearInterval(restTimerInterval);
-          isRestTimerRunning = false;
-          updateRestTimerBtnText();
-          // バイブレーション（サポートデバイスのみ）
-          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-          playTimerDoneSound();
-        }
-      }, 1000);
+      restTimerInterval = setInterval(restTimerTick, 250);
+      updateRestTimerBtnText();
+      acquireWakeLockIfEnabled();
+    }
+
+    function restTimerTick() {
+      if (!isRestTimerRunning) return;
+      const remainMs = restTimerEndAt - Date.now();
+      if (remainMs <= 0) { finishRestTimer(); return; }
+      restTimerValue = Math.ceil(remainMs / 1000);
+      updateRestTimerBtnText();
+    }
+
+    function finishRestTimer() {
+      if (restTimerInterval) clearInterval(restTimerInterval);
+      isRestTimerRunning = false;
+      restTimerValue = 0;
+      restTimerEndAt = 0;
+      persistRestTimer();
+      updateRestTimerBtnText();
+      document.title = ORIGINAL_TITLE;
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300]);
+      playTimerDoneSound();
+      showRestDoneNotification();
+      releaseWakeLock();
+    }
+
+    function stopRestTimer() {
+      if (restTimerInterval) clearInterval(restTimerInterval);
+      isRestTimerRunning = false;
+      restTimerValue = 0;
+      restTimerEndAt = 0;
+      persistRestTimer();
+      updateRestTimerBtnText();
+      document.title = ORIGINAL_TITLE;
+      releaseWakeLock();
     }
 
     // タイマーのON/OFF（一時停止した場合は残り時間から再開する）
     function toggleRestTimer() {
       if (isRestTimerRunning) {
+        restTimerValue = Math.max(0, Math.ceil((restTimerEndAt - Date.now()) / 1000));
         clearInterval(restTimerInterval);
         isRestTimerRunning = false;
+        restTimerEndAt = 0;
+        persistRestTimer();
         updateRestTimerBtnText();
+        releaseWakeLock();
       } else if (restTimerValue > 0) {
-        // 残り時間がある場合はリセットせず、そのまま再開
+        ensureAudioUnlocked();
+        restTimerEndAt = Date.now() + restTimerValue * 1000;
         isRestTimerRunning = true;
-        updateRestTimerBtnText();
+        persistRestTimer();
         if (restTimerInterval) clearInterval(restTimerInterval);
-        restTimerInterval = setInterval(() => {
-          if (restTimerValue > 0) {
-            restTimerValue--;
-            updateRestTimerBtnText();
-          } else {
-            clearInterval(restTimerInterval);
-            isRestTimerRunning = false;
-            updateRestTimerBtnText();
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-          playTimerDoneSound();
-          }
-        }, 1000);
+        restTimerInterval = setInterval(restTimerTick, 250);
+        updateRestTimerBtnText();
+        acquireWakeLockIfEnabled();
       } else {
         startRestTimer();
       }
     }
 
+    function onRestTimeSelectChange() {
+      const sec = parseInt(document.getElementById('rest-time-select').value);
+      if (isRestTimerRunning) {
+        restTimerEndAt = Date.now() + sec * 1000;
+        restTimerValue = sec;
+        persistRestTimer();
+        updateRestTimerBtnText();
+      } else if (restTimerValue > 0) {
+        restTimerValue = sec;
+        persistRestTimer();
+        updateRestTimerBtnText();
+      }
+    }
+
+    function addRestTime(sec) {
+      if (isRestTimerRunning && restTimerEndAt > 0) {
+        restTimerEndAt += sec * 1000;
+        restTimerValue = Math.ceil((restTimerEndAt - Date.now()) / 1000);
+      } else if (restTimerValue > 0) {
+        restTimerValue += sec;
+      } else { return; }
+      persistRestTimer();
+      updateRestTimerBtnText();
+    }
+
+    function restoreRestTimer() {
+      const saved = safeParse(REST_TIMER_KEY, null);
+      if (!saved) return;
+      if (saved.running && saved.endAt) {
+        const remainMs = saved.endAt - Date.now();
+        if (remainMs > 0) {
+          restTimerEndAt = saved.endAt;
+          restTimerValue = Math.ceil(remainMs / 1000);
+          isRestTimerRunning = true;
+          if (restTimerInterval) clearInterval(restTimerInterval);
+          restTimerInterval = setInterval(restTimerTick, 250);
+          updateRestTimerBtnText();
+        } else {
+          // アプリを閉じている間に終わっていた場合：開いた直後に一度だけ知らせる
+          localStorage.removeItem(REST_TIMER_KEY);
+          setTimeout(() => {
+            showRestDoneNotification();
+            const st = document.getElementById('rest-timer-status');
+            if (st) st.innerText = 'インターバルはアプリを閉じている間に終了しました。';
+          }, 600);
+        }
+      } else if (saved.remaining > 0) {
+        restTimerValue = saved.remaining;
+        updateRestTimerBtnText();
+      }
+    }
+
+    // --- 画面スリープ防止（Wake Lock） ---
+    async function acquireWakeLockIfEnabled() {
+      const cb = document.getElementById('wakelock-toggle');
+      if (!cb || !cb.checked) return;
+      try {
+        if ('wakeLock' in navigator && !wakeLockObj) {
+          wakeLockObj = await navigator.wakeLock.request('screen');
+          wakeLockObj.addEventListener('release', () => { wakeLockObj = null; });
+        }
+      } catch (e) {}
+    }
+    function releaseWakeLock() {
+      try { if (wakeLockObj) wakeLockObj.release(); } catch (e) {}
+      wakeLockObj = null;
+    }
+    function toggleWakeLockSetting() {
+      const cb = document.getElementById('wakelock-toggle');
+      try { localStorage.setItem('burnfit_wakelock', cb && cb.checked ? '1' : '0'); } catch (e) {}
+      if (cb && cb.checked && isRestTimerRunning) acquireWakeLockIfEnabled();
+      if (cb && !cb.checked) releaseWakeLock();
+    }
+    function initRestTimerUI() {
+      const cb = document.getElementById('wakelock-toggle');
+      if (cb) { try { cb.checked = localStorage.getItem('burnfit_wakelock') !== '0'; } catch (e) { cb.checked = true; } }
+      updateNotifyBtn();
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        restTimerTick();
+        if (isRestTimerRunning) acquireWakeLockIfEnabled();
+      }
+    });
+
     function updateRestTimerBtnText() {
       const btn = document.getElementById('rest-timer-btn');
+      if (!btn) return;
       if (restTimerValue > 0) {
         btn.innerText = `${restTimerValue}秒 (${isRestTimerRunning ? '一時停止' : '再開'})`;
         btn.className = "bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1 rounded-lg font-bold";
+        if (isRestTimerRunning) document.title = `⏱ 残り${restTimerValue}秒 - BurnFit`;
       } else {
         btn.innerText = "スタート";
         btn.className = "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 py-1 rounded-lg font-bold";
+        document.title = ORIGINAL_TITLE;
       }
     }
 
@@ -1385,8 +1691,8 @@
         row.className = "flex justify-between items-center bg-slate-950/50 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition";
         row.innerHTML = `
           <div class="flex items-center flex-1 min-w-0">
-            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2 shrink-0">${ex.category}</span>
-            <span class="text-sm font-semibold text-slate-200 truncate">${ex.name}</span>
+            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2 shrink-0">${escapeHtml(ex.category)}</span>
+            <span class="text-sm font-semibold text-slate-200 truncate">${escapeHtml(ex.name)}</span>
           </div>
           <div class="flex items-center shrink-0">
             ${deleteBtnHtml}
@@ -1418,8 +1724,8 @@
         name: base.name,
         category: base.category,
         type: base.type,
-        sets: [
-          base.type === 'duration' 
+        sets: getLastSetsForExercise(base.name) || [
+          base.type === 'duration'
             ? { weight: 0, duration: 60, done: false }
             : { weight: 0, reps: 10, done: false }
         ]
@@ -1485,12 +1791,12 @@
         });
 
         card.innerHTML = `
-          <button onclick="deleteRoutine('${item.id}')" class="absolute top-4 right-4 text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition">
+          <button onclick="deleteRoutine('${item.id}')" class="absolute top-3 right-3 text-slate-500 hover:text-rose-400 p-2.5 transition">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
           <div>
-            <h3 class="font-extrabold text-white text-lg">${item.name}</h3>
-            ${item.description ? `<p class="text-xs text-slate-400 mt-1">${item.description}</p>` : ''}
+            <h3 class="font-extrabold text-white text-lg">${escapeHtml(item.name)}</h3>
+            ${item.description ? `<p class="text-xs text-slate-400 mt-1">${escapeHtml(item.description)}</p>` : ''}
           </div>
 
           <div class="bg-slate-900/40 rounded-2xl p-3 border border-slate-800/60">
@@ -1499,8 +1805,8 @@
               ${exercisesInRoutine.map(ex => `
                 <li class="flex items-center gap-2 text-sm text-slate-300">
                   <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 shrink-0"></i>
-                  <span>${ex.name}</span>
-                  <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded ml-auto">${ex.category}</span>
+                  <span>${escapeHtml(ex.name)}</span>
+                  <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded ml-auto">${escapeHtml(ex.category)}</span>
                 </li>
               `).join('')}
             </ul>
@@ -1543,8 +1849,8 @@
         item.innerHTML = `
           <input type="checkbox" name="routine-ex-checkbox" value="${ex.id}" class="rounded text-orange-500 focus:ring-orange-500 bg-slate-900 border-slate-700" />
           <div class="flex-1 flex justify-between">
-            <span>${ex.name}</span>
-            <span class="text-[9px] text-slate-500">${ex.category}</span>
+            <span>${escapeHtml(ex.name)}</span>
+            <span class="text-[9px] text-slate-500">${escapeHtml(ex.category)}</span>
           </div>
         `;
         container.appendChild(item);
@@ -1725,10 +2031,10 @@
             </div>
             <div class="flex gap-1.5 shrink-0">
               <!-- 編集(書き換え)ボタン -->
-              <button onclick="openEditHistoryModal('${log.id}')" class="text-slate-500 hover:text-orange-400 p-1" title="履歴を編集">
+              <button onclick="openEditHistoryModal('${log.id}')" class="text-slate-500 hover:text-orange-400 p-2.5" title="履歴を編集">
                 <i data-lucide="edit-3" class="w-4 h-4"></i>
               </button>
-              <button onclick="deleteHistoryEntry('${log.id}')" class="text-slate-500 hover:text-rose-400 p-1" title="履歴を削除">
+              <button onclick="deleteHistoryEntry('${log.id}')" class="text-slate-500 hover:text-rose-400 p-2.5" title="履歴を削除">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
               </button>
             </div>
@@ -1738,13 +2044,13 @@
             ${log.exercises.map(ex => `
               <div class="space-y-1.5">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${ex.category}</span>
-                  <span class="font-bold text-sm text-slate-200">${ex.name}</span>
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${escapeHtml(ex.category)}</span>
+                  <span class="font-bold text-sm text-slate-200">${escapeHtml(ex.name)}</span>
                 </div>
                 <div class="flex flex-wrap gap-2 pl-2">
                   ${ex.sets.map((set, sIdx) => `
                     <span class="text-xs bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-400">
-                      ${sIdx + 1}S: <strong class="text-slate-200">${set.weight}kg</strong> × <strong class="text-slate-200">${set.reps || set.duration || 0}</strong>
+                      ${sIdx + 1}S: <strong class="text-slate-200">${formatSetSummary(ex, set)}</strong>
                     </span>
                   `).join('')}
                 </div>
@@ -1810,7 +2116,7 @@
               <!-- 重量入力 -->
               <div class="flex-1 flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
                 <input 
-                  type="number" 
+                  type="number" inputmode="decimal"
                   value="${set.weight}" 
                   oninput="updateEditHistorySetField(${exIdx}, ${sIdx}, 'weight', this.value)"
                   class="bg-transparent text-sm text-center text-white font-bold w-full focus:outline-none"
@@ -1822,7 +2128,7 @@
               <!-- レップ/時間入力 -->
               <div class="flex-1 flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
                 <input 
-                  type="number" 
+                  type="number" inputmode="numeric"
                   value="${valField}" 
                   oninput="updateEditHistorySetField(${exIdx}, ${sIdx}, '${isDuration ? 'duration' : 'reps'}', this.value)"
                   class="bg-transparent text-sm text-center text-white font-bold w-full focus:outline-none"
@@ -1836,10 +2142,10 @@
 
         exBlock.innerHTML = `
           <div class="flex justify-between items-center">
-            <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${ex.category}</span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">${escapeHtml(ex.category)}</span>
             <div class="flex items-center gap-2">
-              <span class="text-sm font-bold text-slate-200">${ex.name}</span>
-              <button onclick="removeExerciseFromEditHistory(${exIdx})" class="text-slate-500 hover:text-rose-400 p-1" title="この種目を削除">
+              <span class="text-sm font-bold text-slate-200">${escapeHtml(ex.name)}</span>
+              <button onclick="removeExerciseFromEditHistory(${exIdx})" class="text-slate-500 hover:text-rose-400 p-2.5" title="この種目を削除">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
               </button>
             </div>
@@ -1848,10 +2154,10 @@
             ${setsMarkup}
           </div>
           <div class="flex gap-2 pt-1 border-t border-slate-800/30 text-[10px] font-bold">
-            <button onclick="addSetToEditHistory(${exIdx})" class="flex-1 py-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-700">
+            <button onclick="addSetToEditHistory(${exIdx})" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-800 text-slate-300 border border-slate-700">
               セット追加
             </button>
-            <button onclick="removeLastSetFromEditHistory(${exIdx})" class="px-3 py-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-700">
+            <button onclick="removeLastSetFromEditHistory(${exIdx})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-700">
               削減
             </button>
           </div>
@@ -1864,7 +2170,7 @@
 
     function updateEditHistorySetField(exIdx, sIdx, field, val) {
       if (!state.editingHistoryData) return;
-      state.editingHistoryData.exercises[exIdx].sets[sIdx][field] = parseFloat(val) || 0;
+      state.editingHistoryData.exercises[exIdx].sets[sIdx][field] = clampSetValue(field, val);
     }
 
     // 編集中の履歴へのセット追加
@@ -1971,8 +2277,8 @@
         row.className = "flex justify-between items-center bg-slate-950/50 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition";
         row.innerHTML = `
           <div>
-            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2 shrink-0">${ex.category}</span>
-            <span class="text-sm font-semibold text-slate-200">${ex.name}</span>
+            <span class="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded mr-2 shrink-0">${escapeHtml(ex.category)}</span>
+            <span class="text-sm font-semibold text-slate-200">${escapeHtml(ex.name)}</span>
           </div>
           <button 
             onclick="addExerciseToHistoryData('${ex.id}')"
@@ -2101,7 +2407,7 @@
         row.className = "space-y-1";
         row.innerHTML = `
           <div class="flex justify-between text-xs font-semibold">
-            <span class="text-slate-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(item.name)}"></span>${item.name}</span>
+            <span class="text-slate-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(item.name)}"></span>${escapeHtml(item.name)}</span>
             <span style="color:${categoryColor(item.name)}">${item.percentage}% (${item.count}セット)</span>
           </div>
           <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
@@ -2125,7 +2431,7 @@
         }).join('');
         const legend = sortedCategories.map(item => `
           <div class="flex items-center justify-between text-xs">
-            <span class="text-slate-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(item.name)}"></span>${item.name}</span>
+            <span class="text-slate-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${categoryColor(item.name)}"></span>${escapeHtml(item.name)}</span>
             <span class="font-bold text-slate-200">${item.percentage}%</span>
           </div>
         `).join('');
@@ -2220,13 +2526,14 @@
         const topCat = sortedCategories[0].name;
         const zeroCats = CATEGORY_ORDER.filter(cat => stats[cat].sets === 0);
         if (zeroCats.length > 0) {
-          adviceText.innerText = `最近は特に「${topCat}」を重点的に鍛えることができています！ 一方で「${zeroCats.join('・')}」はまだ記録がありません。全身のバランスのために、次はその部位も入れてみるのがおすすめです。`;
+          adviceText.innerText = `これまでの記録では「${topCat}」が一番多くなっています。一方で「${zeroCats.join('・')}」はまだ記録がありません。全身のバランスのために、次はその部位も入れてみるのがおすすめです。`;
         } else {
           const leastCat = sortedCategories[sortedCategories.length - 1].name;
-          adviceText.innerText = `最近は特に「${topCat}」を重点的に鍛えることができています！ 全身のバランスを高めるために、一番少ない「${leastCat}」を少し多めに入れてみるのもおすすめです。`;
+          adviceText.innerText = `これまでの記録では「${topCat}」が一番多くなっています。全身のバランスを高めるために、一番少ない「${leastCat}」を少し多めに入れてみるのもおすすめです。`;
         }
       }
     }
   </script>
+
 </body>
 </html>
